@@ -7,7 +7,7 @@ import {
   useUpdateContact,
   useDeleteContact,
   AddressType,
-  Contact,
+  type Contact,
 } from "@/core/account/contact"
 import { useGetMe, useUpdateMe } from "@/core/account/account"
 import { Button } from "@/components/ui/button"
@@ -37,13 +37,28 @@ import {
   Pencil,
   Trash2,
   Home,
-  Briefcase,
+  Building2,
   Loader2,
   Star,
   Phone,
   User,
 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+
+type ContactFormData = {
+  full_name: string
+  phone: string
+  address: string
+  address_type: "Home" | "Work"
+}
+
+const emptyForm: ContactFormData = {
+  full_name: "",
+  phone: "",
+  address: "",
+  address_type: "Home",
+}
 
 export default function AddressesPage() {
   const { data: contacts, isLoading } = useListContacts()
@@ -55,18 +70,12 @@ export default function AddressesPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-
-  const [formData, setFormData] = useState({
-    full_name: "",
-    phone: "",
-    address: "",
-    address_type: "Home" as "Home" | "Work",
-  })
+  const [deleteConfirm, setDeleteConfirm] = useState<Contact | null>(null)
+  const [formData, setFormData] = useState<ContactFormData>(emptyForm)
 
   const openAddDialog = () => {
     setEditingContact(null)
-    setFormData({ full_name: "", phone: "", address: "", address_type: "Home" })
+    setFormData(emptyForm)
     setIsDialogOpen(true)
   }
 
@@ -82,34 +91,70 @@ export default function AddressesPage() {
   }
 
   const handleSubmit = async () => {
-    if (editingContact) {
-      await updateContact.mutateAsync({
-        contact_id: editingContact.id,
-        ...formData,
-      })
-    } else {
-      await createContact.mutateAsync(formData)
+    if (!formData.full_name || !formData.phone || !formData.address) {
+      toast.error("Please fill in all required fields")
+      return
     }
-    setIsDialogOpen(false)
+
+    try {
+      if (editingContact) {
+        await updateContact.mutateAsync({
+          contact_id: editingContact.id,
+          full_name: formData.full_name,
+          phone: formData.phone,
+          address: formData.address,
+          address_type: formData.address_type,
+        })
+        toast.success("Address updated successfully")
+      } else {
+        await createContact.mutateAsync(formData)
+        toast.success("Address added successfully")
+      }
+      setIsDialogOpen(false)
+    } catch (error) {
+      toast.error(
+        editingContact ? "Failed to update address" : "Failed to add address"
+      )
+      console.error(error)
+    }
   }
 
-  const handleDelete = async (id: string) => {
-    await deleteContact.mutateAsync({ contact_id: id })
-    setDeleteConfirm(null)
+  const handleDelete = async () => {
+    if (!deleteConfirm) return
+    try {
+      await deleteContact.mutateAsync({ contact_id: deleteConfirm.id })
+      toast.success("Address deleted successfully")
+      setDeleteConfirm(null)
+    } catch (error) {
+      toast.error("Failed to delete address")
+      console.error(error)
+    }
   }
 
   const handleSetDefault = async (contactId: string) => {
-    await updateMe.mutateAsync({ default_contact_id: contactId })
+    try {
+      await updateMe.mutateAsync({ default_contact_id: contactId })
+      toast.success("Default address updated")
+    } catch (error) {
+      toast.error("Failed to set default address")
+      console.error(error)
+    }
   }
 
   const isSubmitting = createContact.isPending || updateContact.isPending
+
+  if (isLoading) {
+    return <AddressesSkeleton />
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Addresses</h1>
-          <p className="text-muted-foreground">Manage your shipping addresses</p>
+          <p className="text-muted-foreground">
+            Manage your delivery addresses
+          </p>
         </div>
         <Button onClick={openAddDialog}>
           <Plus className="h-4 w-4 mr-2" />
@@ -117,41 +162,26 @@ export default function AddressesPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <Skeleton className="h-6 w-16" />
-                  <Skeleton className="h-5 w-5" />
-                </div>
-                <Skeleton className="h-4 w-32 mb-2" />
-                <Skeleton className="h-4 w-24 mb-2" />
-                <Skeleton className="h-4 w-full" />
-              </CardContent>
-            </Card>
-          ))}
+      {!contacts || contacts.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="inline-flex h-24 w-24 items-center justify-center rounded-full bg-muted mb-6">
+            <MapPin className="h-12 w-12 text-muted-foreground" />
+          </div>
+          <h2 className="text-2xl font-semibold mb-2">No addresses yet</h2>
+          <p className="text-muted-foreground max-w-md mx-auto mb-6">
+            Add a delivery address to make checkout faster.
+          </p>
+          <Button onClick={openAddDialog}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Your First Address
+          </Button>
         </div>
-      ) : !contacts || contacts.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No addresses yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Add an address to make checkout faster.
-            </p>
-            <Button onClick={openAddDialog}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Address
-            </Button>
-          </CardContent>
-        </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {contacts.map((contact) => {
             const isDefault = user?.default_contact_id === contact.id
-            const Icon = contact.address_type === AddressType.Home ? Home : Briefcase
+            const isHome = contact.address_type === AddressType.Home
+            const TypeIcon = isHome ? Home : Building2
 
             return (
               <Card
@@ -162,8 +192,8 @@ export default function AddressesPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="gap-1">
-                        <Icon className="h-3 w-3" />
-                        {contact.address_type === AddressType.Home ? "Home" : "Work"}
+                        <TypeIcon className="h-3 w-3" />
+                        {isHome ? "Home" : "Work"}
                       </Badge>
                       {isDefault && (
                         <Badge className="gap-1">
@@ -185,7 +215,7 @@ export default function AddressesPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteConfirm(contact.id)}
+                        onClick={() => setDeleteConfirm(contact)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -194,16 +224,18 @@ export default function AddressesPage() {
 
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
+                      <User className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium">{contact.full_name}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span>{contact.phone}</span>
                     </div>
                     <div className="flex items-start gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <span className="text-muted-foreground">{contact.address}</span>
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <span className="text-muted-foreground">
+                        {contact.address}
+                      </span>
                     </div>
                   </div>
 
@@ -215,6 +247,7 @@ export default function AddressesPage() {
                       onClick={() => handleSetDefault(contact.id)}
                       disabled={updateMe.isPending}
                     >
+                      <Star className="h-4 w-4 mr-1" />
                       Set as Default
                     </Button>
                   )}
@@ -234,41 +267,59 @@ export default function AddressesPage() {
             </DialogTitle>
             <DialogDescription>
               {editingContact
-                ? "Update your address details"
-                : "Add a new shipping address"}
+                ? "Update your delivery address details."
+                : "Add a new delivery address to your account."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="full_name">Full Name</Label>
-              <Input
-                id="full_name"
-                placeholder="Enter full name"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              />
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="full_name"
+                  placeholder="Enter full name"
+                  className="pl-10"
+                  value={formData.full_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="Enter phone number"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  className="pl-10"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
-              <Input
-                id="address"
-                placeholder="Enter full address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              />
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="address"
+                  placeholder="Enter full address"
+                  className="pl-10"
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -280,11 +331,21 @@ export default function AddressesPage() {
                 }
               >
                 <SelectTrigger id="address_type">
-                  <SelectValue />
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Home">Home</SelectItem>
-                  <SelectItem value="Work">Work</SelectItem>
+                  <SelectItem value="Home">
+                    <div className="flex items-center gap-2">
+                      <Home className="h-4 w-4" />
+                      Home
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="Work">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Work
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -311,21 +372,33 @@ export default function AddressesPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+      <Dialog
+        open={!!deleteConfirm}
+        onOpenChange={() => setDeleteConfirm(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Address</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this address? This action cannot be undone.
+              Are you sure you want to delete this address? This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
+          {deleteConfirm && (
+            <div className="rounded-lg border p-4 space-y-1">
+              <p className="font-medium">{deleteConfirm.full_name}</p>
+              <p className="text-sm text-muted-foreground">
+                {deleteConfirm.address}
+              </p>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
+              onClick={handleDelete}
               disabled={deleteContact.isPending}
             >
               {deleteContact.isPending ? (
@@ -340,6 +413,42 @@ export default function AddressesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function AddressesSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-48 mt-1" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Card key={i}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex gap-2">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <div className="flex gap-1">
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="h-8 w-8" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }

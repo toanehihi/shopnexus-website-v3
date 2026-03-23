@@ -1,9 +1,19 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { customFetchStandard } from "@/lib/queryclient/custom-fetch"
 import { useInfiniteQueryPagination } from "@/lib/queryclient/use-infinite-query"
 import { PaginationParams } from "@/lib/queryclient/response.type"
 
 // ===== Types =====
+
+export const PromotionTypes = [
+  "Discount",
+  "ShipDiscount",
+  "Bundle",
+  "BuyXGetY",
+  "Cashback",
+] as const
+
+export type PromotionType = (typeof PromotionTypes)[number]
 
 export type PromotionRef = {
   ref_type: string
@@ -19,6 +29,9 @@ export type Promotion = {
   description: string | null
   is_active: boolean
   auto_apply: boolean
+  group: string
+  priority: number
+  data: unknown
   date_started: string
   date_ended: string | null
   date_created: string
@@ -34,6 +47,96 @@ export type PromotionDiscount = Promotion & {
 }
 
 // ===== Hooks =====
+
+export const useGetPromotion = (id?: string) =>
+  useQuery({
+    queryKey: ["promotion", id],
+    queryFn: async () =>
+      customFetchStandard<Promotion>(`catalog/promotion/${id}`),
+    enabled: !!id,
+  })
+
+export const useListPromotionVendor = (
+  params: PaginationParams<{
+    is_active?: boolean
+  }>
+) =>
+  useInfiniteQueryPagination<Promotion>(
+    ["promotion", "list", "vendor"],
+    "catalog/promotion",
+    params
+  )
+
+export const useCreatePromotion = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: {
+      code: string
+      type: PromotionType
+      title: string
+      description?: string | null
+      is_active: boolean
+      auto_apply: boolean
+      group: string
+      priority: number
+      data?: unknown
+      date_started: string
+      date_ended?: string | null
+      refs?: PromotionRef[]
+    }) =>
+      customFetchStandard<Promotion>(`catalog/promotion`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["promotion"] })
+    },
+  })
+}
+
+export const useUpdatePromotion = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: {
+      id: string
+      code?: string | null
+      title?: string | null
+      description?: string | null
+      is_active?: boolean | null
+      auto_apply?: boolean | null
+      group?: string | null
+      priority?: number | null
+      data?: unknown
+      null_data?: boolean
+      date_started?: string | null
+      date_ended?: string | null
+      null_date_ended?: boolean
+      refs?: PromotionRef[]
+    }) =>
+      customFetchStandard<Promotion>(`catalog/promotion`, {
+        method: "PATCH",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["promotion"] })
+    },
+  })
+}
+
+export const useDeletePromotion = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      customFetchStandard<{ message: string }>(`catalog/promotion/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["promotion"] })
+    },
+  })
+}
+
+// Legacy discount-specific hooks (kept for backward compatibility)
 
 export const useCreateDiscount = () => {
   const qc = useQueryClient()
@@ -56,11 +159,11 @@ export const useCreateDiscount = () => {
       discount_price?: number | null
     }) =>
       customFetchStandard<PromotionDiscount>(`catalog/promotion/discount`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['promotion'] })
+      await qc.invalidateQueries({ queryKey: ["promotion"] })
     },
   })
 }
@@ -88,32 +191,11 @@ export const useUpdateDiscount = () => {
       discount_price?: number | null
     }) =>
       customFetchStandard<PromotionDiscount>(`catalog/promotion/discount`, {
-        method: 'PATCH',
+        method: "PATCH",
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['promotion'] })
+      await qc.invalidateQueries({ queryKey: ["promotion"] })
     },
   })
 }
-
-export const useListPromotionVendor = (params: PaginationParams<{
-  is_active?: boolean
-}>) =>
-  useInfiniteQueryPagination<Promotion>(
-    ['promotion', 'list', 'vendor'],
-    'catalog/promotion',
-    params
-  )
-
-export const useDeletePromotion = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => customFetchStandard<{ message: string }>(`catalog/promotion/${id}`, { method: 'DELETE' }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['promotion'] })
-    },
-  })
-}
-
-

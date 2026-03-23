@@ -1,63 +1,92 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
+import { useQueries } from "@tanstack/react-query"
+import { useListFavorites, useRemoveFavorite } from "@/core/account/favorite"
+import { customFetchStandard } from "@/lib/queryclient/custom-fetch"
+import { TProductCard } from "@/core/catalog/product.customer"
+import { ProductCard, ProductCardSkeleton } from "@/components/product/product-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Heart, ShoppingCart, Trash2, Star } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Heart, Trash2, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { toast } from "@/components/ui/sonner"
 
-// Static mock data for wishlist template
-const mockWishlistItems = [
-  {
-    id: "1",
-    name: "Premium Wireless Headphones",
-    price: 199.99,
-    originalPrice: 249.99,
-    image: null,
-    inStock: true,
-    rating: 4.5,
-  },
-  {
-    id: "2",
-    name: "Leather Messenger Bag",
-    price: 89.99,
-    originalPrice: 89.99,
-    image: null,
-    inStock: true,
-    rating: 4.8,
-  },
-  {
-    id: "3",
-    name: "Smart Watch Pro",
-    price: 299.99,
-    originalPrice: 349.99,
-    image: null,
-    inStock: false,
-    rating: 4.2,
-  },
-]
+const PAGE_SIZE = 12
 
 export default function WishlistPage() {
-  const isEmpty = false // Set to true to show empty state
+  const [page, setPage] = useState(1)
+
+  const {
+    data: favoritesRes,
+    isLoading: isFavoritesLoading,
+    isError: isFavoritesError,
+  } = useListFavorites({ page, limit: PAGE_SIZE })
+
+  const favorites = favoritesRes?.data ?? []
+  const total = favoritesRes?.pagination?.total ?? 0
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  // Fetch product cards for each favorite's spu_id
+  const productQueries = useQueries({
+    queries: favorites.map((fav) => ({
+      queryKey: ["product", "card", fav.spu_id],
+      queryFn: () =>
+        customFetchStandard<TProductCard>(`catalog/product-card/${fav.spu_id}`),
+      enabled: !!fav.spu_id,
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+
+  const removeFavorite = useRemoveFavorite()
+
+  const handleRemove = async (spuId: string) => {
+    try {
+      await removeFavorite.mutateAsync(spuId)
+      toast.success("Removed from wishlist")
+    } catch {
+      toast.error("Failed to remove item from wishlist")
+    }
+  }
+
+  const isLoading = isFavoritesLoading
+  const isEmpty = !isLoading && favorites.length === 0
+
+  if (isLoading) {
+    return <WishlistSkeleton />
+  }
+
+  if (isFavoritesError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">My Wishlist</h1>
+          <p className="text-muted-foreground">Something went wrong loading your wishlist.</p>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-muted-foreground">Please try again later.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">My Wishlist</h1>
           <p className="text-muted-foreground">
-            {mockWishlistItems.length} items saved
+            {total} {total === 1 ? "item" : "items"} saved
           </p>
         </div>
-        {!isEmpty && (
-          <Button variant="outline">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Clear All
-          </Button>
-        )}
       </div>
 
       {isEmpty ? (
+        /* Empty State */
         <Card>
           <CardContent className="p-8 text-center">
             <Heart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -71,70 +100,139 @@ export default function WishlistPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {mockWishlistItems.map((item) => (
-            <Card key={item.id} className="overflow-hidden">
-              <div className="relative aspect-[4/3] bg-muted flex items-center justify-center">
-                <Heart className="h-12 w-12 text-muted-foreground/30" />
-                {!item.inStock && (
-                  <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Out of Stock
-                    </span>
+        /* Product Grid */
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          {favorites.map((fav, index) => {
+            const productQuery = productQueries[index]
+            const product = productQuery?.data
+
+            if (productQuery?.isLoading) {
+              return (
+                <div key={fav.id} className="relative">
+                  <ProductCardSkeleton />
+                </div>
+              )
+            }
+
+            if (!product) {
+              // Fallback card when product data is unavailable
+              return (
+                <Card key={fav.id} className="overflow-hidden">
+                  <div className="relative aspect-square bg-muted flex items-center justify-center">
+                    <Heart className="h-8 w-8 text-muted-foreground/30" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-1.5 right-1.5 h-8 w-8 rounded-full bg-white/80 hover:bg-white shadow-sm text-destructive hover:text-destructive"
+                      onClick={() => handleRemove(fav.spu_id)}
+                      disabled={removeFavorite.isPending}
+                    >
+                      {removeFavorite.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
-                )}
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground truncate">
+                      Product unavailable
+                    </p>
+                    <Link
+                      href={`/product/${fav.spu_id}`}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      View Product
+                    </Link>
+                  </CardContent>
+                </Card>
+              )
+            }
+
+            return (
+              <div key={fav.id} className="relative group/wishlist">
+                <ProductCard product={product} />
+                {/* Remove button overlay */}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute top-2 right-2 h-8 w-8 text-destructive hover:text-destructive"
+                  className="absolute top-1.5 left-1.5 z-10 h-8 w-8 rounded-full bg-white/80 hover:bg-red-50 shadow-sm text-destructive hover:text-destructive opacity-0 group-hover/wishlist:opacity-100 transition-opacity duration-200"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleRemove(fav.spu_id)
+                  }}
+                  disabled={removeFavorite.isPending}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {removeFavorite.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-1 mb-1">
-                  <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                  <span className="text-xs text-muted-foreground">
-                    {item.rating}
-                  </span>
-                </div>
-                <h3 className="font-medium text-sm line-clamp-1 mb-1">
-                  {item.name}
-                </h3>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="font-semibold">{formatPrice(item.price)}</span>
-                  {item.originalPrice > item.price && (
-                    <span className="text-sm text-muted-foreground line-through">
-                      {formatPrice(item.originalPrice)}
-                    </span>
-                  )}
-                </div>
-                <Button
-                  className="w-full"
-                  size="sm"
-                  disabled={!item.inStock}
-                >
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  {item.inStock ? "Add to Cart" : "Out of Stock"}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+            )
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground px-2">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
       {/* Info Banner */}
-      <Card className="bg-muted/50">
-        <CardContent className="p-4 flex items-center gap-4">
-          <Heart className="h-8 w-8 text-primary flex-shrink-0" />
-          <div>
-            <p className="font-medium">Save for later</p>
-            <p className="text-sm text-muted-foreground">
-              Items in your wishlist will be saved here. We&apos;ll notify you when prices drop!
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {!isEmpty && (
+        <Card className="bg-muted/50">
+          <CardContent className="p-4 flex items-center gap-4">
+            <Heart className="h-8 w-8 text-primary flex-shrink-0" />
+            <div>
+              <p className="font-medium">Save for later</p>
+              <p className="text-sm text-muted-foreground">
+                Items in your wishlist will be saved here. We&apos;ll notify you when prices drop!
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function WishlistSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-4 w-24 mt-1" />
+      </div>
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <ProductCardSkeleton key={i} />
+        ))}
+      </div>
     </div>
   )
 }
