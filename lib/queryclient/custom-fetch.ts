@@ -29,12 +29,16 @@ export async function customFetch<TResponse = unknown>(
 
   // small helper to run the actual request (allows retry after refresh)
   async function runRequest(): Promise<Response> {
+    const requestHeaders: Record<string, string> = { ...headers, ...options.headers as Record<string, string> }
+
+    // Let the browser set Content-Type for FormData (includes boundary)
+    if (options.body instanceof FormData) {
+      delete requestHeaders['Content-Type']
+    }
+
     return fetch(resolvedUrl, {
       ...options,
-      headers: {
-        ...headers,
-        ...options.headers,
-      },
+      headers: requestHeaders,
     })
   }
 
