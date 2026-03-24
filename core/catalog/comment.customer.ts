@@ -39,7 +39,7 @@ export const useCreateComment = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: {
-      ref_type: string
+      ref_type: "ProductSpu" | "Comment"
       ref_id: string
       body: string
       score: number

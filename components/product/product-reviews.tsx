@@ -7,6 +7,7 @@ import {
 	useCreateComment,
 	TComment,
 } from "@/core/catalog/comment.customer"
+import { useUploadFile } from "@/core/common/file"
 import { useGetMe } from "@/core/account/account"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -31,6 +32,8 @@ import {
 	Pencil,
 	ImageIcon,
 	MessageCircle,
+	Upload,
+	X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -60,6 +63,10 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 	const [isWriteDialogOpen, setIsWriteDialogOpen] = useState(false)
 	const [reviewScore, setReviewScore] = useState(5)
 	const [reviewBody, setReviewBody] = useState("")
+	const [reviewFiles, setReviewFiles] = useState<File[]>([])
+	const [uploadedIds, setUploadedIds] = useState<string[]>([])
+	const [previewUrls, setPreviewUrls] = useState<string[]>([])
+	const uploadFile = useUploadFile()
 	const [hoverScore, setHoverScore] = useState<number | null>(null)
 
 	const comments = data?.pages.flatMap((page) => page.data) ?? []
@@ -82,17 +89,45 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 		}
 	})
 
+	const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const files = Array.from(e.target.files || [])
+		const newFiles = files.slice(0, 5 - reviewFiles.length) // max 5 files
+		setReviewFiles(prev => [...prev, ...newFiles])
+		setPreviewUrls(prev => [...prev, ...newFiles.map(f => URL.createObjectURL(f))])
+		e.target.value = "" // reset input
+	}
+
+	const removeFile = (index: number) => {
+		URL.revokeObjectURL(previewUrls[index])
+		setReviewFiles(prev => prev.filter((_, i) => i !== index))
+		setPreviewUrls(prev => prev.filter((_, i) => i !== index))
+	}
+
 	const handleSubmitReview = async () => {
+		// Upload files first
+		const ids: string[] = []
+		for (const file of reviewFiles) {
+			try {
+				const result = await uploadFile.mutateAsync(file)
+				ids.push(result.id)
+			} catch {
+				// skip failed uploads
+			}
+		}
+
 		await createComment.mutateAsync({
-			ref_type: "product",
+			ref_type: "ProductSpu",
 			ref_id: productId,
 			body: reviewBody,
 			score: reviewScore,
-			resource_ids: [],
+			resource_ids: ids,
 		})
 		setIsWriteDialogOpen(false)
 		setReviewBody("")
 		setReviewScore(5)
+		setReviewFiles([])
+		previewUrls.forEach(url => URL.revokeObjectURL(url))
+		setPreviewUrls([])
 	}
 
 	const formatDate = (dateStr: string) => {
@@ -366,6 +401,38 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 								onChange={(e) => setReviewBody(e.target.value)}
 							/>
 						</div>
+
+						{/* File Upload */}
+						<div className="space-y-2">
+							<label className="text-sm font-medium">Photos / Videos</label>
+							<div className="flex flex-wrap gap-2">
+								{previewUrls.map((url, i) => (
+									<div key={i} className="relative h-20 w-20 rounded-md overflow-hidden border">
+										<img src={url} alt="" className="h-full w-full object-cover" />
+										<button
+											type="button"
+											onClick={() => removeFile(i)}
+											className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80"
+										>
+											<X className="h-3 w-3" />
+										</button>
+									</div>
+								))}
+								{reviewFiles.length < 5 && (
+									<label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-muted-foreground/30 hover:border-muted-foreground/50 transition-colors">
+										<Upload className="h-5 w-5 text-muted-foreground" />
+										<input
+											type="file"
+											accept="image/*,video/*"
+											multiple
+											onChange={handleFileSelect}
+											className="hidden"
+										/>
+									</label>
+								)}
+							</div>
+							<p className="text-xs text-muted-foreground">Up to 5 files. Images or videos.</p>
+						</div>
 					</div>
 
 					<DialogFooter>
@@ -377,9 +444,14 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 						</Button>
 						<Button
 							onClick={handleSubmitReview}
-							disabled={createComment.isPending || !reviewBody.trim()}
+							disabled={createComment.isPending || uploadFile.isPending || !reviewBody.trim()}
 						>
-							{createComment.isPending ? (
+							{uploadFile.isPending ? (
+								<>
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+									Uploading...
+								</>
+							) : createComment.isPending ? (
 								<>
 									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
 									Submitting...
