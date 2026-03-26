@@ -17,6 +17,8 @@ export type Contact = {
   phone_verified: boolean
   address: string
   address_type: AddressType
+  latitude?: number | null
+  longitude?: number | null
   date_created: string
   date_updated: string
 }
@@ -43,6 +45,8 @@ export const useCreateContact = () =>
       phone: string
       address: string
       address_type: 'Home' | 'Work'
+      latitude?: number | null
+      longitude?: number | null
     }) =>
       customFetchStandard<Contact>('account/contact', {
         method: 'POST',
@@ -63,6 +67,8 @@ export const useUpdateContact = () =>
       address?: string
       address_type?: 'Home' | 'Work'
       phone_verified?: boolean
+      latitude?: number | null
+      longitude?: number | null
     }) =>
       customFetchStandard<Contact>('account/contact', {
         method: 'PATCH',

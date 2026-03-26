@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   useListContacts,
   useCreateContact,
@@ -10,6 +10,7 @@ import {
   type Contact,
 } from "@/core/account/contact"
 import { useGetMe, useUpdateMe } from "@/core/account/account"
+import { useGeolocation } from "@/lib/geocoding/use-geolocation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -42,6 +43,7 @@ import {
   Star,
   Phone,
   User,
+  Navigation,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -51,6 +53,8 @@ type ContactFormData = {
   phone: string
   address: string
   address_type: "Home" | "Work"
+  latitude: number | null
+  longitude: number | null
 }
 
 const emptyForm: ContactFormData = {
@@ -58,6 +62,8 @@ const emptyForm: ContactFormData = {
   phone: "",
   address: "",
   address_type: "Home",
+  latitude: null,
+  longitude: null,
 }
 
 export default function AddressesPage() {
@@ -73,6 +79,32 @@ export default function AddressesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<Contact | null>(null)
   const [formData, setFormData] = useState<ContactFormData>(emptyForm)
 
+  const {
+    getLocation,
+    isLoading: isLocating,
+    error: geoError,
+    result: geoResult,
+  } = useGeolocation()
+
+  // When geolocation result arrives, fill the form
+  useEffect(() => {
+    if (geoResult) {
+      setFormData((prev) => ({
+        ...prev,
+        address: geoResult.address,
+        latitude: geoResult.latitude,
+        longitude: geoResult.longitude,
+      }))
+    }
+  }, [geoResult])
+
+  // Show geolocation errors as toasts
+  useEffect(() => {
+    if (geoError) {
+      toast.error(geoError)
+    }
+  }, [geoError])
+
   const openAddDialog = () => {
     setEditingContact(null)
     setFormData(emptyForm)
@@ -86,6 +118,8 @@ export default function AddressesPage() {
       phone: contact.phone,
       address: contact.address,
       address_type: contact.address_type === AddressType.Home ? "Home" : "Work",
+      latitude: contact.latitude ?? null,
+      longitude: contact.longitude ?? null,
     })
     setIsDialogOpen(true)
   }
@@ -104,10 +138,19 @@ export default function AddressesPage() {
           phone: formData.phone,
           address: formData.address,
           address_type: formData.address_type,
+          latitude: formData.latitude,
+          longitude: formData.longitude,
         })
         toast.success("Address updated successfully")
       } else {
-        await createContact.mutateAsync(formData)
+        await createContact.mutateAsync({
+          full_name: formData.full_name,
+          phone: formData.phone,
+          address: formData.address,
+          address_type: formData.address_type,
+          latitude: formData.latitude,
+          longitude: formData.longitude,
+        })
         toast.success("Address added successfully")
       }
       setIsDialogOpen(false)
@@ -237,6 +280,15 @@ export default function AddressesPage() {
                         {contact.address}
                       </span>
                     </div>
+                    {contact.latitude != null && contact.longitude != null && (
+                      <div className="flex items-center gap-2">
+                        <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-xs text-muted-foreground">
+                          Coordinates: {contact.latitude.toFixed(6)},{" "}
+                          {contact.longitude.toFixed(6)}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {!isDefault && (
@@ -308,6 +360,27 @@ export default function AddressesPage() {
 
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full mb-2"
+                onClick={getLocation}
+                disabled={isLocating}
+              >
+                {isLocating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Locating...
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="h-4 w-4 mr-1" />
+                    <Navigation className="h-4 w-4 mr-2" />
+                    Use my location
+                  </>
+                )}
+              </Button>
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -320,6 +393,13 @@ export default function AddressesPage() {
                   }
                 />
               </div>
+              {formData.latitude != null && formData.longitude != null && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Navigation className="h-3 w-3" />
+                  Coordinates: {formData.latitude.toFixed(6)},{" "}
+                  {formData.longitude.toFixed(6)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
