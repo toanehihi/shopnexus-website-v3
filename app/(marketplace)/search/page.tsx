@@ -110,7 +110,7 @@ function SearchContent() {
 
 		// Rating filter
 		if (minRating !== null) {
-			result = result.filter((product) => product.rating.score >= minRating)
+			result = result.filter((product) => product.rating.score * 5 >= minRating)
 		}
 
 		// Category filter

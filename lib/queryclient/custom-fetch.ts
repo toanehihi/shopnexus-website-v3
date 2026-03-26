@@ -1,35 +1,24 @@
-import { ErrorCode, ResponseError, SuccessPaginationRes, SuccessResponse } from './response.type'
+import { ResponseError, SuccessPaginationRes, SuccessResponse } from './response.type'
 
 const BASE_URL = 'https://shopnexus.hopto.org/api/v1/'
 
-const headers: Record<string, string> = {
+const defaultHeaders: Record<string, string> = {
   'Content-Type': 'application/json',
-}
-
-const _process = { env: { NODE_ENV: '', NEXT_PUBLIC_TOKEN: '' } as Record<string, string | undefined> }
-
-if (_process.env.NODE_ENV === 'development' && globalThis?.localStorage && _process.env.NEXT_PUBLIC_TOKEN?.length) {
-  console.warn(`Development mode: Using local storage token ${_process.env.NEXT_PUBLIC_TOKEN}`)
-  globalThis?.localStorage?.setItem?.('token', _process.env.NEXT_PUBLIC_TOKEN ?? '')
 }
 
 export async function customFetch<TResponse = unknown>(
   url: string,
   options: RequestInit = {},
 ) {
-  // prepare auth header from current access token
-  const token = globalThis?.localStorage?.getItem?.('token')
-  if (token?.length) {
-    headers.Authorization = `Bearer ${token}`
-  } else {
-    headers.Authorization = ''
-  }
-
   const resolvedUrl = resolveUrl(BASE_URL, url)
 
-  // small helper to run the actual request (allows retry after refresh)
   async function runRequest(): Promise<Response> {
-    const requestHeaders: Record<string, string> = { ...headers, ...options.headers as Record<string, string> }
+    const token = globalThis?.localStorage?.getItem?.('token')
+    const requestHeaders: Record<string, string> = {
+      ...defaultHeaders,
+      ...(token?.length ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers as Record<string, string>,
+    }
 
     // Let the browser set Content-Type for FormData (includes boundary)
     if (options.body instanceof FormData) {
@@ -49,12 +38,24 @@ export async function customFetch<TResponse = unknown>(
   if (response.status === 401) {
     const refreshed = await tryRefreshTokens()
     if (refreshed) {
-      const newToken = globalThis?.localStorage?.getItem?.('token')
-      if (newToken?.length) {
-        headers.Authorization = `Bearer ${newToken}`
-      }
       response = await runRequest()
+    } else {
+      // Refresh failed — clear tokens and redirect to login
+      clearAuth()
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
+      throw new ResponseError(401, 'auth.expired', 'Session expired. Please log in again.')
     }
+  }
+
+  // If still 401 after refresh retry (e.g., new token also expired)
+  if (response.status === 401) {
+    clearAuth()
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login'
+    }
+    throw new ResponseError(401, 'auth.expired', 'Session expired. Please log in again.')
   }
 
   // try reading json safely
@@ -65,9 +66,12 @@ export async function customFetch<TResponse = unknown>(
     // ignore json parse errors (e.g., 204 No Content)
   }
 
-
   if (hasErrorEnvelope(data)) {
-    throw new ResponseError(data.error.code, data.error.message)
+    throw new ResponseError(response.status, data.error.code, data.error.message)
+  }
+
+  if (!response.ok) {
+    throw new ResponseError(response.status, 'unknown', `Request failed with status ${response.status}`)
   }
 
   return data as TResponse
@@ -81,7 +85,6 @@ export async function customFetchStandard<Data = unknown>(
   return response.data
 }
 
-
 export async function customFetchPagination<Data = unknown>(
   url: string,
   options: RequestInit = {},
@@ -89,22 +92,23 @@ export async function customFetchPagination<Data = unknown>(
   return customFetch<SuccessPaginationRes<Data>>(url, options)
 }
 
-// Helper function to resolve URLs
 function resolveUrl(base: string, path: string): string {
   return new URL(path, base).toString()
 }
 
-// Attempt to refresh access token using refresh token. Returns true if succeeded
+function clearAuth() {
+  globalThis?.localStorage?.removeItem?.('token')
+  globalThis?.localStorage?.removeItem?.('refresh_token')
+}
+
 async function tryRefreshTokens(): Promise<boolean> {
   try {
     const refreshToken = globalThis?.localStorage?.getItem?.('refresh_token')
     if (!refreshToken?.length) return false
 
-    const response = await fetch(resolveUrl(BASE_URL, 'auth/refresh'), {
+    const response = await fetch(resolveUrl(BASE_URL, 'account/auth/refresh'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
     })
 
@@ -126,10 +130,9 @@ async function tryRefreshTokens(): Promise<boolean> {
   }
 }
 
-// Type guard for API error envelope
 function hasErrorEnvelope(
   value: unknown,
-): value is { error: { code: ErrorCode; message: string } } {
+): value is { error: { code: string; message: string } } {
   if (typeof value !== 'object' || value === null) return false
   const maybe = value as Record<string, unknown>
   if (!('error' in maybe)) return false

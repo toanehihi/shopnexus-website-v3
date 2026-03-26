@@ -79,7 +79,7 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 			case "3":
 			case "2":
 			case "1":
-				return comment.score === parseInt(activeFilter)
+				return Math.round(comment.score * 5) === parseInt(activeFilter)
 			case "with_comment":
 				return comment.body && comment.body.trim().length > 0
 			case "with_media":
@@ -116,7 +116,7 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 				ref_type: "ProductSpu",
 				ref_id: productId,
 				body: reviewBody,
-				score: reviewScore,
+				score: reviewScore / 5,
 				resource_ids: ids,
 			})
 			setIsWriteDialogOpen(false)
@@ -176,7 +176,7 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 						<div className="text-center md:text-left flex-shrink-0">
 							<div className="flex items-baseline justify-center md:justify-start gap-1">
 								<span className="text-4xl font-bold text-primary">
-									{(rating.score / 20).toFixed(1)}
+									{(rating.score * 5).toFixed(1)}
 								</span>
 								<span className="text-lg text-muted-foreground">/ 5</span>
 							</div>
@@ -186,7 +186,7 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 										key={i}
 										className={cn(
 											"h-5 w-5",
-											i < Math.round(rating.score / 20)
+											i < Math.round(rating.score * 5)
 												? "fill-yellow-400 text-yellow-400"
 												: "text-muted-foreground/30"
 										)}
@@ -501,7 +501,7 @@ function ReviewCard({
 											key={i}
 											className={cn(
 												"h-3 w-3",
-												i < comment.score
+												i < Math.round(comment.score * 5)
 													? "fill-yellow-400 text-yellow-400"
 													: "text-muted-foreground/30"
 											)}

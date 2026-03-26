@@ -311,7 +311,7 @@ export default function ProductDetailPage({
 										key={i}
 										className={cn(
 											"h-4 w-4 sm:h-5 sm:w-5",
-											i < Math.round(product.rating.score)
+											i < Math.round(product.rating.score * 5)
 												? "fill-yellow-400 text-yellow-400"
 												: "text-muted-foreground/30"
 										)}
@@ -320,7 +320,7 @@ export default function ProductDetailPage({
 							</div>
 							<span className="text-xs sm:text-sm">
 								<span className="font-medium">
-									{product.rating.score.toFixed(1)}
+									{(product.rating.score * 5).toFixed(1)}
 								</span>
 								<span className="text-muted-foreground">
 									{" "}

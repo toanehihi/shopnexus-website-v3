@@ -22,17 +22,17 @@ export type SuccessPaginationRes<Item> = SuccessResponse<Item[]> & {
   }
 }
 
-export enum ErrorCode {
-  "auth.invalid_credentials",
-  "auth.account_not_found",
-  "auth.missing_identifier"
-}
-
 export class ResponseError extends Error {
-  constructor(public code: ErrorCode, public message: string) {
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string,
+  ) {
     super(message)
-
-    // Set the prototype explicitly.
     Object.setPrototypeOf(this, ResponseError.prototype)
+  }
+
+  get isUnauthorized() {
+    return this.statusCode === 401
   }
 }

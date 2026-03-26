@@ -186,7 +186,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
               <div className="flex items-center gap-0.5">
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                 <span className="font-medium text-foreground">
-                  {product.rating.score.toFixed(1)}
+                  {(product.rating.score * 5).toFixed(1)}
                 </span>
                 <span className="hidden sm:inline">
                   ({product.rating.total > 999 ? formatSoldCount(product.rating.total) : product.rating.total})

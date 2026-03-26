@@ -215,7 +215,7 @@ export default function VendorProductsPage() {
 											<div className="flex items-center gap-1">
 												<Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
 												<span>
-													{product.rating?.score?.toFixed(1) || "N/A"}
+													{product.rating?.score != null ? (product.rating.score * 5).toFixed(1) : "N/A"}
 												</span>
 												<span className="text-muted-foreground">
 													({product.rating?.total || 0})
