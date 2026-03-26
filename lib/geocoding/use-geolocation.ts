@@ -24,17 +24,8 @@ export function useGeolocation() {
     setError(null)
 
     try {
-      // Step 1: Get GPS coordinates from browser
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, (err) => {
-          const messages: Record<number, string> = {
-            1: 'Location blocked. Click the lock icon in your address bar → Site settings → Location → Allow, then try again.',
-            2: 'Location unavailable. Please check your device GPS settings.',
-            3: 'Location request timed out. Please try again.',
-          }
-          reject(new Error(messages[err.code] || `Geolocation error (code ${err.code}): ${err.message}`))
-        }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 })
-      })
+      // Step 1: Get GPS coordinates — try high accuracy first, fall back to low
+      const position = await getGPSPosition()
 
       const { latitude, longitude, accuracy } = position.coords
 
@@ -65,4 +56,26 @@ export function formatAccuracy(meters: number): { label: string; level: 'good' |
   if (meters <= 100) return { label: `±${Math.round(meters)}m`, level: 'ok' }
   if (meters <= 1000) return { label: `±${(meters / 1000).toFixed(1)}km (approximate)`, level: 'poor' }
   return { label: `±${Math.round(meters / 1000)}km (very approximate — please verify address)`, level: 'poor' }
+}
+
+// Try high accuracy GPS first (mobile), fall back to low accuracy (desktop WiFi/IP).
+function getGPSPosition(): Promise<GeolocationPosition> {
+  const errorMessages: Record<number, string> = {
+    1: 'Location blocked. Click the lock icon in your address bar → Site settings → Location → Allow, then try again.',
+    2: 'Location unavailable. Please check your device GPS settings.',
+    3: 'Location request timed out. Please try again.',
+  }
+
+  function attempt(highAccuracy: boolean, timeout: number): Promise<GeolocationPosition> {
+    return new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, (err) => {
+        reject(err)
+      }, { enableHighAccuracy: highAccuracy, timeout, maximumAge: 300000 })
+    })
+  }
+
+  // Try high accuracy (GPS) with 8s timeout, then fall back to low accuracy
+  return attempt(true, 8000).catch(() => attempt(false, 15000)).catch((err) => {
+    throw new Error(errorMessages[err.code] || `Geolocation error (code ${err.code}): ${err.message}`)
+  })
 }
