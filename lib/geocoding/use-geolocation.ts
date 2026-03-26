@@ -27,7 +27,7 @@ export function useGeolocation() {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, (err) => {
           const messages: Record<number, string> = {
-            1: 'Location permission denied. Please allow location access in your browser settings.',
+            1: 'Location blocked. Click the lock icon in your address bar → Site settings → Location → Allow, then try again.',
             2: 'Location unavailable. Please check your device GPS settings.',
             3: 'Location request timed out. Please try again.',
           }
