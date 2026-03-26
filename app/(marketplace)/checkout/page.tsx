@@ -1,49 +1,128 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { useGetCart } from "@/core/order/cart"
+import { useQuote, useCheckout } from "@/core/order/order.customer"
+import { useListContacts, AddressType, type Contact } from "@/core/account/contact"
+import { useGetMe } from "@/core/account/account"
+import { useListServiceOption } from "@/core/common/option"
 import { formatPrice } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  ChevronLeft,
-  CreditCard,
-  Lock,
-  ShoppingBag,
+  MapPin,
   Truck,
+  CreditCard,
+  Loader2,
+  ChevronLeft,
   Check,
+  ShoppingBag,
+  ExternalLink,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 const steps = [
   { id: 1, name: "Shipping" },
-  { id: 2, name: "Payment" },
-  { id: 3, name: "Review" },
+  { id: 2, name: "Payment & Review" },
 ]
 
 export default function CheckoutPage() {
-  const { data: cart, isLoading } = useGetCart()
-  const [currentStep, setCurrentStep] = useState(1)
+  const router = useRouter()
+  const { data: cart, isLoading: cartLoading } = useGetCart()
+  const { data: contacts, isLoading: contactsLoading } = useListContacts()
+  const { data: user } = useGetMe()
+  const { data: shipmentOptions, isLoading: shipmentLoading } = useListServiceOption({ category: "shipment" })
+  const { data: paymentOptions, isLoading: paymentLoading } = useListServiceOption({ category: "payment" })
 
-  const subtotal = cart?.reduce((acc, item) => acc + item.sku.price * item.quantity, 0) ?? 0
+  const quoteMutation = useQuote()
+  const checkoutMutation = useCheckout()
+
+  const [currentStep, setCurrentStep] = useState(1)
+  const [selectedContactId, setSelectedContactId] = useState<string>("")
+  const [selectedShipmentOption, setSelectedShipmentOption] = useState<string>("")
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
+
+  // Set defaults when data loads
+  useEffect(() => {
+    if (contacts && contacts.length > 0 && !selectedContactId) {
+      const defaultContact = user?.default_contact_id
+        ? contacts.find((c) => c.id === user.default_contact_id)
+        : null
+      setSelectedContactId(defaultContact?.id ?? contacts[0].id)
+    }
+  }, [contacts, user, selectedContactId])
+
+  useEffect(() => {
+    if (shipmentOptions && shipmentOptions.length > 0 && !selectedShipmentOption) {
+      setSelectedShipmentOption(shipmentOptions[0].id)
+    }
+  }, [shipmentOptions, selectedShipmentOption])
+
+  useEffect(() => {
+    if (paymentOptions && paymentOptions.length > 0 && !selectedPaymentOption) {
+      setSelectedPaymentOption(paymentOptions[0].id)
+    }
+  }, [paymentOptions, selectedPaymentOption])
+
+  const selectedContact = useMemo(
+    () => contacts?.find((c) => c.id === selectedContactId) ?? null,
+    [contacts, selectedContactId]
+  )
+
+  // Fetch quote when we have address + shipment + cart
+  useEffect(() => {
+    if (selectedContact && selectedShipmentOption && cart && cart.length > 0) {
+      quoteMutation.mutate({
+        address: selectedContact.address,
+        items: cart.map((item) => ({
+          sku_id: item.sku.id,
+          quantity: item.quantity,
+          shipment_option: selectedShipmentOption,
+        })),
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedContactId, selectedShipmentOption, cart])
+
+  const handlePlaceOrder = async () => {
+    if (!selectedContact || !selectedPaymentOption || !selectedShipmentOption || !cart) return
+
+    try {
+      const result = await checkoutMutation.mutateAsync({
+        address: selectedContact.address,
+        payment_option: selectedPaymentOption,
+        buy_now: false,
+        items: cart.map((item) => ({
+          sku_id: item.sku.id,
+          quantity: item.quantity,
+          shipment_option: selectedShipmentOption,
+        })),
+      })
+
+      toast.success("Order placed successfully!")
+
+      if (result.url) {
+        window.location.href = result.url
+      } else {
+        router.push("/account/orders")
+      }
+    } catch (error) {
+      toast.error("Failed to place order. Please try again.")
+      console.error(error)
+    }
+  }
+
+  const isLoading = cartLoading || contactsLoading || shipmentLoading || paymentLoading
   const itemCount = cart?.reduce((acc, item) => acc + item.quantity, 0) ?? 0
-  const shipping = subtotal > 50 ? 0 : 5.99
-  const tax = subtotal * 0.08
-  const total = subtotal + shipping + tax
 
   if (isLoading) {
     return <CheckoutPageSkeleton />
@@ -63,6 +142,9 @@ export default function CheckoutPage() {
       </div>
     )
   }
+
+  const canProceedToStep2 = !!selectedContactId && !!selectedShipmentOption
+  const canPlaceOrder = canProceedToStep2 && !!selectedPaymentOption
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -91,11 +173,7 @@ export default function CheckoutPage() {
                     : "border-muted text-muted-foreground"
               )}
             >
-              {currentStep > step.id ? (
-                <Check className="h-5 w-5" />
-              ) : (
-                step.id
-              )}
+              {currentStep > step.id ? <Check className="h-5 w-5" /> : step.id}
             </div>
             <span
               className={cn(
@@ -119,240 +197,277 @@ export default function CheckoutPage() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Main Content */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Step 1: Address & Shipping */}
           {currentStep === 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Truck className="h-5 w-5" />
-                  Shipping Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" placeholder="John" />
+            <>
+              {/* Address Selection */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <MapPin className="h-5 w-5" />
+                      Delivery Address
+                    </CardTitle>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/account/addresses" className="gap-1">
+                        Manage addresses
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" placeholder="Doe" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input id="phone" type="tel" placeholder="+1 (555) 000-0000" />
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input id="address" placeholder="123 Main St" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address2">Apartment, suite, etc. (optional)</Label>
-                  <Input id="address2" placeholder="Apt 4B" />
-                </div>
-
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input id="city" placeholder="New York" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
-                    <Select>
-                      <SelectTrigger id="state">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ny">New York</SelectItem>
-                        <SelectItem value="ca">California</SelectItem>
-                        <SelectItem value="tx">Texas</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="zip">ZIP Code</Label>
-                    <Input id="zip" placeholder="10001" />
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-3">
-                  <Label>Shipping Method</Label>
-                  <Tabs defaultValue="standard" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="standard">Standard</TabsTrigger>
-                      <TabsTrigger value="express">Express</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="standard" className="border rounded-lg p-4 mt-2">
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="font-medium">Standard Shipping</p>
-                          <p className="text-sm text-muted-foreground">5-7 business days</p>
-                        </div>
-                        <p className="font-medium">{shipping === 0 ? "Free" : formatPrice(shipping)}</p>
+                </CardHeader>
+                <CardContent>
+                  {!contacts || contacts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+                        <MapPin className="h-8 w-8 text-muted-foreground" />
                       </div>
-                    </TabsContent>
-                    <TabsContent value="express" className="border rounded-lg p-4 mt-2">
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="font-medium">Express Shipping</p>
-                          <p className="text-sm text-muted-foreground">2-3 business days</p>
-                        </div>
-                        <p className="font-medium">{formatPrice(14.99)}</p>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </div>
-
-                <Button size="lg" className="w-full" onClick={() => setCurrentStep(2)}>
-                  Continue to Payment
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {currentStep === 2 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  Payment Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cardNumber">Card Number</Label>
-                  <Input id="cardNumber" placeholder="1234 5678 9012 3456" />
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="expiry">Expiry Date</Label>
-                    <Input id="expiry" placeholder="MM/YY" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cvc">CVC</Label>
-                    <Input id="cvc" placeholder="123" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cardName">Name on Card</Label>
-                  <Input id="cardName" placeholder="John Doe" />
-                </div>
-
-                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-                  <Lock className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Your payment information is encrypted and secure.
-                  </p>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button variant="outline" size="lg" onClick={() => setCurrentStep(1)}>
-                    Back
-                  </Button>
-                  <Button size="lg" className="flex-1" onClick={() => setCurrentStep(3)}>
-                    Review Order
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {currentStep === 3 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Review Your Order</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <h4 className="font-medium mb-3">Shipping Address</h4>
-                  <div className="text-sm text-muted-foreground">
-                    <p>John Doe</p>
-                    <p>123 Main St, Apt 4B</p>
-                    <p>New York, NY 10001</p>
-                    <p>john@example.com</p>
-                  </div>
-                  <Button variant="link" className="px-0 h-auto" onClick={() => setCurrentStep(1)}>
-                    Edit
-                  </Button>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h4 className="font-medium mb-3">Payment Method</h4>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <CreditCard className="h-4 w-4" />
-                    <span>Visa ending in 3456</span>
-                  </div>
-                  <Button variant="link" className="px-0 h-auto" onClick={() => setCurrentStep(2)}>
-                    Edit
-                  </Button>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h4 className="font-medium mb-3">Items ({itemCount})</h4>
-                  <div className="space-y-3">
-                    {cart.map((item) => (
-                      <div key={item.sku.id} className="flex gap-3">
-                        <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                          {item.resource?.url ? (
-                            <Image
-                              src={item.resource.url}
-                              alt="Product"
-                              fill
-                              className="object-cover"
+                      <h3 className="font-semibold mb-2">No saved addresses</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Add an address first to continue with checkout.
+                      </p>
+                      <Button asChild>
+                        <Link href="/account/addresses">Add an Address</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <RadioGroup
+                      value={selectedContactId}
+                      onValueChange={setSelectedContactId}
+                      className="space-y-3"
+                    >
+                      {contacts.map((contact) => {
+                        const isDefault = user?.default_contact_id === contact.id
+                        const isHome = contact.address_type === AddressType.Home
+                        return (
+                          <Label
+                            key={contact.id}
+                            htmlFor={`address-${contact.id}`}
+                            className={cn(
+                              "flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors hover:bg-accent/50",
+                              selectedContactId === contact.id && "border-primary bg-accent/30"
+                            )}
+                          >
+                            <RadioGroupItem
+                              value={contact.id}
+                              id={`address-${contact.id}`}
+                              className="mt-1"
                             />
-                          ) : (
-                            <div className="flex items-center justify-center h-full">
-                              <ShoppingBag className="h-6 w-6 text-muted-foreground/50" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium">{contact.full_name}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {isHome ? "Home" : "Work"}
+                                </Badge>
+                                {isDefault && (
+                                  <Badge className="text-xs">Default</Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{contact.phone}</p>
+                              <p className="text-sm text-muted-foreground">{contact.address}</p>
                             </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {item.sku.attributes?.map(a => a.value).join(" / ") || "Product"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
-                        </div>
-                        <p className="font-medium">
-                          {formatPrice(item.sku.price * item.quantity)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                          </Label>
+                        )
+                      })}
+                    </RadioGroup>
+                  )}
+                </CardContent>
+              </Card>
 
-                <div className="flex gap-3">
-                  <Button variant="outline" size="lg" onClick={() => setCurrentStep(2)}>
-                    Back
+              {/* Shipment Option Selection */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Truck className="h-5 w-5" />
+                    Shipping Method
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!shipmentOptions || shipmentOptions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No shipping options available.</p>
+                  ) : (
+                    <RadioGroup
+                      value={selectedShipmentOption}
+                      onValueChange={setSelectedShipmentOption}
+                      className="space-y-3"
+                    >
+                      {shipmentOptions.map((option) => (
+                        <Label
+                          key={option.id}
+                          htmlFor={`shipment-${option.id}`}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors hover:bg-accent/50",
+                            selectedShipmentOption === option.id && "border-primary bg-accent/30"
+                          )}
+                        >
+                          <RadioGroupItem
+                            value={option.id}
+                            id={`shipment-${option.id}`}
+                          />
+                          <div className="flex-1">
+                            <span className="font-medium">{option.name}</span>
+                            {option.description && (
+                              <p className="text-sm text-muted-foreground">{option.description}</p>
+                            )}
+                          </div>
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={!canProceedToStep2}
+                onClick={() => setCurrentStep(2)}
+              >
+                Continue to Payment
+              </Button>
+            </>
+          )}
+
+          {/* Step 2: Payment & Review */}
+          {currentStep === 2 && (
+            <>
+              {/* Payment Option Selection */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Payment Method
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!paymentOptions || paymentOptions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No payment options available.</p>
+                  ) : (
+                    <RadioGroup
+                      value={selectedPaymentOption}
+                      onValueChange={setSelectedPaymentOption}
+                      className="space-y-3"
+                    >
+                      {paymentOptions.map((option) => (
+                        <Label
+                          key={option.id}
+                          htmlFor={`payment-${option.id}`}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors hover:bg-accent/50",
+                            selectedPaymentOption === option.id && "border-primary bg-accent/30"
+                          )}
+                        >
+                          <RadioGroupItem
+                            value={option.id}
+                            id={`payment-${option.id}`}
+                          />
+                          <div className="flex-1">
+                            <span className="font-medium">{option.name}</span>
+                            {option.description && (
+                              <p className="text-sm text-muted-foreground">{option.description}</p>
+                            )}
+                          </div>
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Order Items Review */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Items ({itemCount})</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {cart.map((item) => (
+                    <div key={item.sku.id} className="flex gap-3">
+                      <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                        {item.resource?.url ? (
+                          <Image
+                            src={item.resource.url}
+                            alt="Product"
+                            fill
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full">
+                            <ShoppingBag className="h-6 w-6 text-muted-foreground/50" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {item.sku.attributes?.map((a) => a.value).join(" / ") || "Product"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                      </div>
+                      <p className="font-medium">
+                        {formatPrice(item.sku.price * item.quantity)}
+                      </p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Delivery Summary */}
+              <Card>
+                <CardContent className="pt-6 space-y-3">
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Delivery to</h4>
+                    {selectedContact && (
+                      <div className="text-sm">
+                        <p className="font-medium">{selectedContact.full_name}</p>
+                        <p>{selectedContact.phone}</p>
+                        <p className="text-muted-foreground">{selectedContact.address}</p>
+                      </div>
+                    )}
+                  </div>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Shipping method</h4>
+                    <p className="text-sm">
+                      {shipmentOptions?.find((o) => o.id === selectedShipmentOption)?.name ?? "-"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="link"
+                    className="px-0 h-auto text-sm"
+                    onClick={() => setCurrentStep(1)}
+                  >
+                    Edit shipping details
                   </Button>
-                  <Button size="lg" className="flex-1">
-                    Place Order
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button variant="outline" size="lg" onClick={() => setCurrentStep(1)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+                <Button
+                  size="lg"
+                  className="flex-1"
+                  disabled={!canPlaceOrder || checkoutMutation.isPending}
+                  onClick={handlePlaceOrder}
+                >
+                  {checkoutMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Placing Order...
+                    </>
+                  ) : (
+                    "Place Order"
+                  )}
+                </Button>
+              </div>
+            </>
           )}
         </div>
 
-        {/* Order Summary */}
+        {/* Order Summary Sidebar */}
         <div className="lg:col-span-1">
           <Card className="sticky top-4">
             <CardHeader>
@@ -382,7 +497,7 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">
-                        {item.sku.attributes?.map(a => a.value).join(" / ") || "Product"}
+                        {item.sku.attributes?.map((a) => a.value).join(" / ") || "Product"}
                       </p>
                     </div>
                     <p className="text-sm font-medium">
@@ -399,28 +514,50 @@ export default function CheckoutPage() {
 
               <Separator />
 
-              {/* Totals */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatPrice(subtotal)}</span>
+              {/* Pricing from Quote */}
+              {quoteMutation.isPending ? (
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between">
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Shipping</span>
-                  <span>{shipping === 0 ? "Free" : formatPrice(shipping)}</span>
+              ) : quoteMutation.isError ? (
+                <div className="text-sm text-destructive">
+                  Failed to calculate pricing. Please try again.
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax</span>
-                  <span>{formatPrice(tax)}</span>
+              ) : quoteMutation.data ? (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Products</span>
+                    <span>{formatPrice(quoteMutation.data.product_cost)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Shipping</span>
+                    <span>{formatPrice(quoteMutation.data.ship_cost)}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between font-semibold text-lg">
+                    <span>Total</span>
+                    <span>{formatPrice(quoteMutation.data.total)}</span>
+                  </div>
                 </div>
-              </div>
-
-              <Separator />
-
-              <div className="flex justify-between font-semibold text-lg">
-                <span>Total</span>
-                <span>{formatPrice(total)}</span>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Select an address and shipping method to see pricing.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -435,17 +572,18 @@ function CheckoutPageSkeleton() {
       <Skeleton className="h-5 w-24 mb-6" />
       <Skeleton className="h-10 w-32 mb-8" />
       <div className="flex items-center justify-center mb-8 gap-4">
-        {Array.from({ length: 3 }).map((_, i) => (
+        {Array.from({ length: 2 }).map((_, i) => (
           <div key={i} className="flex items-center gap-2">
             <Skeleton className="h-10 w-10 rounded-full" />
             <Skeleton className="h-4 w-16 hidden sm:block" />
-            {i < 2 && <Skeleton className="h-0.5 w-12 sm:w-24 mx-4" />}
+            {i < 1 && <Skeleton className="h-0.5 w-12 sm:w-24 mx-4" />}
           </div>
         ))}
       </div>
       <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <Skeleton className="h-96 rounded-lg" />
+        <div className="lg:col-span-2 space-y-6">
+          <Skeleton className="h-64 rounded-lg" />
+          <Skeleton className="h-48 rounded-lg" />
         </div>
         <div>
           <Skeleton className="h-80 rounded-lg" />
