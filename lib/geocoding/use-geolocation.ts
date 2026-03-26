@@ -26,20 +26,13 @@ export function useGeolocation() {
       // Step 1: Get GPS coordinates from browser
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, (err) => {
-          switch (err.code) {
-            case err.PERMISSION_DENIED:
-              reject(new Error('Location permission denied. Please allow location access.'))
-              break
-            case err.POSITION_UNAVAILABLE:
-              reject(new Error('Location unavailable. Please try again.'))
-              break
-            case err.TIMEOUT:
-              reject(new Error('Location request timed out. Please try again.'))
-              break
-            default:
-              reject(new Error('Failed to get location.'))
+          const messages: Record<number, string> = {
+            1: 'Location permission denied. Please allow location access in your browser settings.',
+            2: 'Location unavailable. Please check your device GPS settings.',
+            3: 'Location request timed out. Please try again.',
           }
-        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 })
+          reject(new Error(messages[err.code] || `Geolocation error (code ${err.code}): ${err.message}`))
+        }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 })
       })
 
       // Step 2: Reverse geocode via backend
