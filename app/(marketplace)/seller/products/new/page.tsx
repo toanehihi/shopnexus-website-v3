@@ -66,14 +66,14 @@ export default function NewProductPage() {
       specifications: specifications.filter((s) => s.name && s.value),
     })
 
-    router.push("/vendor/products")
+    router.push("/seller/products")
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/vendor/products">
+          <Link href="/seller/products">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -231,7 +231,7 @@ export default function NewProductPage() {
         {/* Actions */}
         <div className="flex items-center justify-end gap-4">
           <Button type="button" variant="outline" asChild>
-            <Link href="/vendor/products">Cancel</Link>
+            <Link href="/seller/products">Cancel</Link>
           </Button>
           <Button
             type="submit"

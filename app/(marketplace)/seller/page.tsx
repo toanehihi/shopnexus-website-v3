@@ -42,10 +42,10 @@ const stats = [
 ]
 
 const recentOrders = [
-  { id: "ORD-001", customer: "John Doe", total: 125.99, status: "Pending" },
-  { id: "ORD-002", customer: "Jane Smith", total: 89.50, status: "Confirmed" },
-  { id: "ORD-003", customer: "Bob Wilson", total: 245.00, status: "Shipped" },
-  { id: "ORD-004", customer: "Alice Brown", total: 67.25, status: "Delivered" },
+  { id: "ORD-001", buyer: "John Doe", total: 125.99, status: "Pending" },
+  { id: "ORD-002", buyer: "Jane Smith", total: 89.50, status: "Confirmed" },
+  { id: "ORD-003", buyer: "Bob Wilson", total: 245.00, status: "Shipped" },
+  { id: "ORD-004", buyer: "Alice Brown", total: 67.25, status: "Delivered" },
 ]
 
 const topProducts = [
@@ -55,7 +55,7 @@ const topProducts = [
   { name: "USB-C Hub", sales: 142, revenue: "$5,680" },
 ]
 
-export default function VendorDashboardPage() {
+export default function SellerDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
@@ -108,7 +108,7 @@ export default function VendorDashboardPage() {
                 >
                   <div>
                     <p className="font-medium">{order.id}</p>
-                    <p className="text-sm text-muted-foreground">{order.customer}</p>
+                    <p className="text-sm text-muted-foreground">{order.buyer}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-medium">${order.total.toFixed(2)}</p>

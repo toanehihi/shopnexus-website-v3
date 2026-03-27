@@ -2,7 +2,7 @@
 
 import { use } from "react"
 import Link from "next/link"
-import { useGetOrder, OrderStatus } from "@/core/order/order.customer"
+import { useGetOrder, usePayOrders } from "@/core/order/order.buyer"
 import { formatPrice } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,28 +15,28 @@ import {
   Truck,
   MapPin,
   CreditCard,
-  Calendar,
   Check,
   Clock,
   XCircle,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
-const statusLabels: Record<OrderStatus, string> = {
-  [OrderStatus.Pending]: "Pending",
-  [OrderStatus.Confirmed]: "Confirmed",
-  [OrderStatus.Shipped]: "Shipped",
-  [OrderStatus.Delivered]: "Delivered",
-  [OrderStatus.Cancelled]: "Cancelled",
+const statusColors: Record<string, string> = {
+  Pending: "bg-yellow-100 text-yellow-800",
+  Confirmed: "bg-blue-100 text-blue-800",
+  Shipped: "bg-purple-100 text-purple-800",
+  Delivered: "bg-green-100 text-green-800",
+  Cancelled: "bg-red-100 text-red-800",
 }
 
-const statusColors: Record<OrderStatus, string> = {
-  [OrderStatus.Pending]: "bg-yellow-100 text-yellow-800",
-  [OrderStatus.Confirmed]: "bg-blue-100 text-blue-800",
-  [OrderStatus.Shipped]: "bg-purple-100 text-purple-800",
-  [OrderStatus.Delivered]: "bg-green-100 text-green-800",
-  [OrderStatus.Cancelled]: "bg-red-100 text-red-800",
-}
+const steps = [
+  { status: "Pending", label: "Order Placed", icon: Clock },
+  { status: "Confirmed", label: "Confirmed", icon: Check },
+  { status: "Shipped", label: "Shipped", icon: Truck },
+  { status: "Delivered", label: "Delivered", icon: Package },
+]
 
 export default function OrderDetailPage({
   params,
@@ -45,6 +45,7 @@ export default function OrderDetailPage({
 }) {
   const { id } = use(params)
   const { data: order, isLoading, error } = useGetOrder(id)
+  const payMutation = usePayOrders()
 
   if (isLoading) {
     return <OrderDetailSkeleton />
@@ -64,15 +65,24 @@ export default function OrderDetailPage({
     )
   }
 
-  const steps = [
-    { status: OrderStatus.Pending, label: "Order Placed", icon: Clock },
-    { status: OrderStatus.Confirmed, label: "Confirmed", icon: Check },
-    { status: OrderStatus.Shipped, label: "Shipped", icon: Truck },
-    { status: OrderStatus.Delivered, label: "Delivered", icon: Package },
-  ]
-
   const currentStepIndex = steps.findIndex((s) => s.status === order.status)
-  const isCancelled = order.status === OrderStatus.Cancelled
+  const isCancelled = order.status === "Cancelled"
+
+  const handlePay = async () => {
+    try {
+      const result = await payMutation.mutateAsync({
+        order_ids: [order.id],
+        payment_option: "default",
+      })
+      if (result.url) {
+        window.location.href = result.url
+      } else {
+        toast.success("Payment initiated successfully.")
+      }
+    } catch {
+      toast.error("Failed to initiate payment.")
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -89,13 +99,50 @@ export default function OrderDetailPage({
             Placed on {new Date(order.date_created).toLocaleDateString()}
           </p>
         </div>
-        <Badge
-          variant="secondary"
-          className={cn("font-normal", statusColors[order.status])}
-        >
-          {statusLabels[order.status]}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {order.payment === null && (
+            <Badge variant="destructive" className="font-normal">
+              Unpaid
+            </Badge>
+          )}
+          <Badge
+            variant="secondary"
+            className={cn("font-normal", statusColors[order.status] ?? "")}
+          >
+            {order.status}
+          </Badge>
+        </div>
       </div>
+
+      {/* Awaiting Payment Banner */}
+      {order.payment === null && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="p-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CreditCard className="h-8 w-8 text-orange-600" />
+              <div>
+                <p className="font-medium text-orange-900">Awaiting Payment</p>
+                <p className="text-sm text-orange-700">
+                  This order needs to be paid before it can be processed.
+                </p>
+              </div>
+            </div>
+            <Button onClick={handlePay} disabled={payMutation.isPending}>
+              {payMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Pay Now
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Order Progress */}
       {!isCancelled && (
@@ -235,17 +282,9 @@ export default function OrderDetailPage({
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Shipping</span>
                 <span>
-                  {order.ship_cost === 0 ? "Free" : formatPrice(order.ship_cost)}
+                  {order.transport_cost === 0 ? "Free" : formatPrice(order.transport_cost)}
                 </span>
               </div>
-              {order.ship_discount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Shipping Discount</span>
-                  <span className="text-green-600">
-                    -{formatPrice(order.ship_discount)}
-                  </span>
-                </div>
-              )}
               <Separator />
               <div className="flex justify-between font-semibold">
                 <span>Total</span>
@@ -263,30 +302,53 @@ export default function OrderDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Method</span>
-                <span>{order.payment.option}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant="secondary" className="font-normal">
-                  {order.payment.status}
-                </Badge>
-              </div>
-              {order.payment.date_paid && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Paid on</span>
-                  <span>
-                    {new Date(order.payment.date_paid).toLocaleDateString()}
-                  </span>
-                </div>
+              {order.payment ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Method</span>
+                    <span>{order.payment.option}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <Badge variant="secondary" className="font-normal">
+                      {order.payment.status}
+                    </Badge>
+                  </div>
+                  {order.payment.date_paid && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Paid on</span>
+                      <span>
+                        {new Date(order.payment.date_paid).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No payment yet. Pay to proceed with this order.
+                </p>
               )}
             </CardContent>
           </Card>
 
           {/* Actions */}
           <div className="space-y-2">
-            {order.status === OrderStatus.Delivered && (
+            {order.payment === null && (
+              <Button className="w-full" onClick={handlePay} disabled={payMutation.isPending}>
+                {payMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Pay Now
+                  </>
+                )}
+              </Button>
+            )}
+            {order.status === "Delivered" && (
               <Button className="w-full" asChild>
                 <Link href={`/account/orders/${order.id}/refund`}>
                   Request Refund

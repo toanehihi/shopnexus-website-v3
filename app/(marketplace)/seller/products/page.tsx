@@ -47,7 +47,7 @@ import {
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
-export default function VendorProductsPage() {
+export default function SellerProductsPage() {
 	const [search, setSearch] = useState("")
 	const [statusFilter, setStatusFilter] = useState<string>("all")
 	const [deleteProduct, setDeleteProduct] = useState<ProductSPU | null>(null)
@@ -80,7 +80,7 @@ export default function VendorProductsPage() {
 					<p className="text-muted-foreground">Manage your product catalog</p>
 				</div>
 				<Button asChild>
-					<Link href="/vendor/products/new">
+					<Link href="/seller/products/new">
 						<Plus className="h-4 w-4 mr-2" />
 						Add Product
 					</Link>
@@ -140,7 +140,7 @@ export default function VendorProductsPage() {
 						</p>
 						{!search && (
 							<Button asChild>
-								<Link href="/vendor/products/new">
+								<Link href="/seller/products/new">
 									<Plus className="h-4 w-4 mr-2" />
 									Add Product
 								</Link>
@@ -195,7 +195,7 @@ export default function VendorProductsPage() {
 														</Link>
 													</DropdownMenuItem>
 													<DropdownMenuItem asChild>
-														<Link href={`/vendor/products/${product.id}/edit`}>
+														<Link href={`/seller/products/${product.id}/edit`}>
 															<Pencil className="h-4 w-4 mr-2" />
 															Edit
 														</Link>

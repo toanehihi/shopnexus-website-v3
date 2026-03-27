@@ -17,7 +17,7 @@ export type TRefund = {
   account_id: string
   order_id: string
   confirmed_by_id: string | null
-  shipment_id: string | null
+  transport_id: string | null
   method: RefundMethod
   status: Status
   reason: string
@@ -28,16 +28,36 @@ export type TRefund = {
 
 // ===== Hooks =====
 
-export const useListRefundsVendor = (params: PaginationParams<{
+export const useCreateRefund = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: {
+      order_id: string
+      method: string
+      reason: string
+      address: string | null
+      resource_ids: string[]
+    }) =>
+      customFetchStandard<TRefund>(`order/refund`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['order', 'refund'] })
+    },
+  })
+}
+
+export const useListRefunds = (params: PaginationParams<{
   status?: string
 }>) =>
   useInfiniteQueryPagination<TRefund>(
-    ['order', 'refund', 'list', 'vendor'],
+    ['order', 'refund', 'list'],
     'order/refund',
     params
   )
 
-export const useUpdateRefundVendor = () => {
+export const useUpdateRefund = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: {
@@ -57,7 +77,7 @@ export const useUpdateRefundVendor = () => {
   })
 }
 
-export const useCancelRefundVendor = () => {
+export const useCancelRefund = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { id: string }) =>
@@ -71,7 +91,7 @@ export const useCancelRefundVendor = () => {
   })
 }
 
-export const useConfirmRefundVendor = () => {
+export const useConfirmRefund = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { id: string }) =>
@@ -84,5 +104,3 @@ export const useConfirmRefundVendor = () => {
     },
   })
 }
-
-

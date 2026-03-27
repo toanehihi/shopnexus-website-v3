@@ -19,11 +19,13 @@ import {
   Bell,
   Settings,
   LogOut,
+  Clock,
 } from "lucide-react"
 
 const sidebarLinks = [
   { href: "/account", label: "Profile", icon: User },
   { href: "/account/orders", label: "Orders", icon: Package },
+  { href: "/account/pending-items", label: "Pending Items", icon: Clock },
   { href: "/account/refunds", label: "Refunds", icon: RotateCcw },
   { href: "/account/wishlist", label: "Wishlist", icon: Heart },
   { href: "/account/addresses", label: "Addresses", icon: MapPin },

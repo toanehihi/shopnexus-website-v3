@@ -1,23 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
-import { useListVendorOrders, useConfirmOrder } from "@/core/order/order.vendor"
-import { TOrder, OrderStatus } from "@/core/order/order.customer"
+import { useListSellerOrders } from "@/core/order/order.seller"
+import { TOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,50 +20,42 @@ import {
   Search,
   MoreVertical,
   Eye,
-  CheckCircle,
   ShoppingCart,
   Package,
   Truck,
+  CheckCircle,
   XCircle,
   Loader2,
+  Clock,
 } from "lucide-react"
 import { formatPrice, cn } from "@/lib/utils"
 
-const statusConfig: Record<OrderStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
-  [OrderStatus.Pending]: { label: "Pending", variant: "secondary", icon: ShoppingCart },
-  [OrderStatus.Confirmed]: { label: "Confirmed", variant: "default", icon: CheckCircle },
-  [OrderStatus.Shipped]: { label: "Shipped", variant: "default", icon: Truck },
-  [OrderStatus.Delivered]: { label: "Delivered", variant: "outline", icon: Package },
-  [OrderStatus.Cancelled]: { label: "Cancelled", variant: "destructive", icon: XCircle },
+const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
+  Pending: { label: "Pending", variant: "secondary", icon: Clock },
+  Confirmed: { label: "Confirmed", variant: "default", icon: CheckCircle },
+  Shipped: { label: "Shipped", variant: "default", icon: Truck },
+  Delivered: { label: "Delivered", variant: "outline", icon: Package },
+  Cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle },
 }
 
-export default function VendorOrdersPage() {
+export default function SellerOrdersPage() {
   const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
-  const [confirmOrder, setConfirmOrder] = useState<TOrder | null>(null)
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListVendorOrders({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListSellerOrders({
     limit: 20,
   })
-  const confirmMutation = useConfirmOrder()
 
-  const orders = data?.pages.flatMap((page) => page.data) ?? []
+  const orders = useMemo(
+    () => data?.pages.flatMap((page) => page.data) ?? [],
+    [data]
+  )
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch = order.id.toLowerCase().includes(search.toLowerCase())
-    const matchesTab = activeTab === "all" ||
-      (activeTab === "pending" && order.status === OrderStatus.Pending) ||
-      (activeTab === "confirmed" && order.status === OrderStatus.Confirmed) ||
-      (activeTab === "shipped" && order.status === OrderStatus.Shipped) ||
-      (activeTab === "delivered" && order.status === OrderStatus.Delivered)
+    const matchesTab = activeTab === "all" || order.status === activeTab
     return matchesSearch && matchesTab
   })
-
-  const handleConfirm = async () => {
-    if (!confirmOrder) return
-    await confirmMutation.mutateAsync({ order_id: confirmOrder.id })
-    setConfirmOrder(null)
-  }
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -87,17 +71,17 @@ export default function VendorOrdersPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Orders</h1>
-        <p className="text-muted-foreground">Manage and fulfill customer orders</p>
+        <p className="text-muted-foreground">View your confirmed orders</p>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all">All Orders</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="confirmed">Confirmed</TabsTrigger>
-          <TabsTrigger value="shipped">Shipped</TabsTrigger>
-          <TabsTrigger value="delivered">Delivered</TabsTrigger>
+          <TabsTrigger value="Pending">Pending</TabsTrigger>
+          <TabsTrigger value="Confirmed">Confirmed</TabsTrigger>
+          <TabsTrigger value="Shipped">Shipped</TabsTrigger>
+          <TabsTrigger value="Delivered">Delivered</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -136,14 +120,14 @@ export default function VendorOrdersPage() {
             <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No orders found</h3>
             <p className="text-muted-foreground">
-              {search ? "Try a different search term" : "Orders will appear here when customers make purchases"}
+              {search ? "Try a different search term" : "Orders will appear here when items are confirmed"}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
           {filteredOrders.map((order) => {
-            const status = statusConfig[order.status]
+            const status = statusConfig[order.status] ?? statusConfig.Pending
             const StatusIcon = status.icon
 
             return (
@@ -157,26 +141,25 @@ export default function VendorOrdersPage() {
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
                         </Badge>
+                        {order.payment === null && (
+                          <Badge variant="destructive" className="font-normal">
+                            Unpaid
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {formatDate(order.date_created)}
                       </p>
+                      <p className="text-sm text-muted-foreground">
+                        Buyer #{order.buyer_id.slice(0, 8)}
+                      </p>
                       <p className="text-sm">
-                        {order.items.length} item{order.items.length !== 1 ? "s" : ""} •
+                        {order.items.length} item{order.items.length !== 1 ? "s" : ""} |
                         <span className="font-medium ml-1">{formatPrice(order.total)}</span>
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {order.status === OrderStatus.Pending && (
-                        <Button
-                          size="sm"
-                          onClick={() => setConfirmOrder(order)}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Confirm
-                        </Button>
-                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="icon" className="h-8 w-8">
@@ -185,7 +168,7 @@ export default function VendorOrdersPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link href={`/vendor/orders/${order.id}`}>
+                            <Link href={`/seller/orders/${order.id}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </Link>
@@ -239,40 +222,6 @@ export default function VendorOrdersPage() {
           )}
         </div>
       )}
-
-      {/* Confirm Order Dialog */}
-      <Dialog open={!!confirmOrder} onOpenChange={() => setConfirmOrder(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Order</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to confirm order #{confirmOrder?.id.slice(0, 8)}?
-              This will notify the customer and start the fulfillment process.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOrder(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirm}
-              disabled={confirmMutation.isPending}
-            >
-              {confirmMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Confirming...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Confirm Order
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

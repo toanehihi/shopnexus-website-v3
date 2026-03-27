@@ -2,30 +2,23 @@
 
 import { useMemo } from "react"
 import Link from "next/link"
-import { useListOrders, OrderStatus, TOrder } from "@/core/order/order.customer"
+import { useListOrders, TOrder, usePayOrders } from "@/core/order/order.buyer"
 import { formatPrice } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, ChevronRight, ShoppingBag, Loader2 } from "lucide-react"
+import { Package, ChevronRight, ShoppingBag, Loader2, CreditCard } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
-const statusLabels: Record<OrderStatus, string> = {
-  [OrderStatus.Pending]: "Pending",
-  [OrderStatus.Confirmed]: "Confirmed",
-  [OrderStatus.Shipped]: "Shipped",
-  [OrderStatus.Delivered]: "Delivered",
-  [OrderStatus.Cancelled]: "Cancelled",
-}
-
-const statusColors: Record<OrderStatus, string> = {
-  [OrderStatus.Pending]: "bg-yellow-100 text-yellow-800",
-  [OrderStatus.Confirmed]: "bg-blue-100 text-blue-800",
-  [OrderStatus.Shipped]: "bg-purple-100 text-purple-800",
-  [OrderStatus.Delivered]: "bg-green-100 text-green-800",
-  [OrderStatus.Cancelled]: "bg-red-100 text-red-800",
+const statusColors: Record<string, string> = {
+  Pending: "bg-yellow-100 text-yellow-800",
+  Confirmed: "bg-blue-100 text-blue-800",
+  Shipped: "bg-purple-100 text-purple-800",
+  Delivered: "bg-green-100 text-green-800",
+  Cancelled: "bg-red-100 text-red-800",
 }
 
 export default function OrdersPage() {
@@ -41,12 +34,12 @@ export default function OrdersPage() {
     return ordersData?.pages.flatMap((page) => page.data) ?? []
   }, [ordersData])
 
-  const pendingOrders = orders.filter(
-    (o) => o.status === OrderStatus.Pending || o.status === OrderStatus.Confirmed
+  const unpaidOrders = orders.filter((o) => o.payment === null)
+  const activeOrders = orders.filter(
+    (o) => o.status === "Pending" || o.status === "Confirmed" || o.status === "Shipped"
   )
-  const shippedOrders = orders.filter((o) => o.status === OrderStatus.Shipped)
-  const completedOrders = orders.filter((o) => o.status === OrderStatus.Delivered)
-  const cancelledOrders = orders.filter((o) => o.status === OrderStatus.Cancelled)
+  const completedOrders = orders.filter((o) => o.status === "Delivered")
+  const cancelledOrders = orders.filter((o) => o.status === "Cancelled")
 
   return (
     <div className="space-y-6">
@@ -58,8 +51,8 @@ export default function OrdersPage() {
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">All ({orders.length})</TabsTrigger>
-          <TabsTrigger value="pending">Pending ({pendingOrders.length})</TabsTrigger>
-          <TabsTrigger value="shipped">Shipped ({shippedOrders.length})</TabsTrigger>
+          <TabsTrigger value="unpaid">Unpaid ({unpaidOrders.length})</TabsTrigger>
+          <TabsTrigger value="active">Active ({activeOrders.length})</TabsTrigger>
           <TabsTrigger value="completed">Completed ({completedOrders.length})</TabsTrigger>
           <TabsTrigger value="cancelled">Cancelled ({cancelledOrders.length})</TabsTrigger>
         </TabsList>
@@ -74,12 +67,12 @@ export default function OrdersPage() {
           />
         </TabsContent>
 
-        <TabsContent value="pending" className="mt-6">
-          <OrderList orders={pendingOrders} isLoading={isLoading} />
+        <TabsContent value="unpaid" className="mt-6">
+          <OrderList orders={unpaidOrders} isLoading={isLoading} />
         </TabsContent>
 
-        <TabsContent value="shipped" className="mt-6">
-          <OrderList orders={shippedOrders} isLoading={isLoading} />
+        <TabsContent value="active" className="mt-6">
+          <OrderList orders={activeOrders} isLoading={isLoading} />
         </TabsContent>
 
         <TabsContent value="completed" className="mt-6">
@@ -107,6 +100,8 @@ function OrderList({
   isFetchingNextPage?: boolean
   onLoadMore?: () => void
 }) {
+  const payMutation = usePayOrders()
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -169,12 +164,19 @@ function OrderList({
                   {new Date(order.date_created).toLocaleDateString()}
                 </span>
               </div>
-              <Badge
-                variant="secondary"
-                className={cn("font-normal", statusColors[order.status])}
-              >
-                {statusLabels[order.status]}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {order.payment === null && (
+                  <Badge variant="destructive" className="font-normal">
+                    Unpaid
+                  </Badge>
+                )}
+                <Badge
+                  variant="secondary"
+                  className={cn("font-normal", statusColors[order.status] ?? "")}
+                >
+                  {order.status}
+                </Badge>
+              </div>
             </div>
 
             {/* Order Items */}
@@ -187,7 +189,7 @@ function OrderList({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{item.sku_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      Qty: {item.quantity} × {formatPrice(item.unit_price)}
+                      Qty: {item.quantity} x {formatPrice(item.unit_price)}
                     </p>
                   </div>
                 </div>
@@ -206,7 +208,36 @@ function OrderList({
                 <p className="font-semibold">{formatPrice(order.total)}</p>
               </div>
               <div className="flex gap-2">
-                {order.status === OrderStatus.Delivered && (
+                {order.payment === null && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={payMutation.isPending}
+                    onClick={async () => {
+                      try {
+                        const result = await payMutation.mutateAsync({
+                          order_ids: [order.id],
+                          payment_option: "default",
+                        })
+                        if (result.url) {
+                          window.location.href = result.url
+                        } else {
+                          toast.success("Payment initiated successfully.")
+                        }
+                      } catch {
+                        toast.error("Failed to initiate payment.")
+                      }
+                    }}
+                  >
+                    {payMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4 mr-1" />
+                    )}
+                    Pay
+                  </Button>
+                )}
+                {order.status === "Delivered" && (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/account/orders/${order.id}/refund`}>
                       Request Refund

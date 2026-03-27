@@ -242,9 +242,9 @@ export function Header() {
 										</DropdownMenuItem>
 										<DropdownMenuSeparator />
 										<DropdownMenuItem asChild>
-											<Link href="/vendor" className="text-primary">
+											<Link href="/seller" className="text-primary">
 												<Store className="h-4 w-4 mr-2" />
-												Vendor Dashboard
+												Seller Dashboard
 											</Link>
 										</DropdownMenuItem>
 										<DropdownMenuSeparator />

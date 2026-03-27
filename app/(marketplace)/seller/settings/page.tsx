@@ -41,7 +41,7 @@ import {
 	Loader2,
 } from "lucide-react"
 
-export default function VendorSettingsPage() {
+export default function SellerSettingsPage() {
 	const { data: user, isLoading } = useGetMe()
 	const updateMe = useUpdateMe()
 	const storeDescriptionRef = useRef<RichTextEditorRef>(null)

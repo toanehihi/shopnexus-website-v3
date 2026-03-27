@@ -100,7 +100,7 @@ const typeBadgeVariant: Record<string, "default" | "secondary" | "outline" | "de
   Cashback: "secondary",
 }
 
-export default function VendorPromotionsPage() {
+export default function SellerPromotionsPage() {
   const [search, setSearch] = useState("")
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null)
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)

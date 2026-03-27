@@ -19,19 +19,21 @@ import {
   Settings,
   LogOut,
   Store,
+  Inbox,
 } from "lucide-react"
 
 const sidebarLinks = [
-  { href: "/vendor", label: "Dashboard", icon: BarChart3 },
-  { href: "/vendor/products", label: "Products", icon: Package },
-  { href: "/vendor/orders", label: "Orders", icon: ShoppingCart },
-  { href: "/vendor/refunds", label: "Refunds", icon: RotateCcw },
-  { href: "/vendor/promotions", label: "Promotions", icon: Tag },
+  { href: "/seller", label: "Dashboard", icon: BarChart3 },
+  { href: "/seller/products", label: "Products", icon: Package },
+  { href: "/seller/incoming", label: "Incoming Items", icon: Inbox },
+  { href: "/seller/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/seller/refunds", label: "Refunds", icon: RotateCcw },
+  { href: "/seller/promotions", label: "Promotions", icon: Tag },
   { href: "/account/chat", label: "Chat", icon: MessageCircle },
-  { href: "/vendor/settings", label: "Settings", icon: Settings },
+  { href: "/seller/settings", label: "Settings", icon: Settings },
 ]
 
-export default function VendorLayout({
+export default function SellerLayout({
   children,
 }: {
   children: React.ReactNode
@@ -74,7 +76,7 @@ export default function VendorLayout({
                     <p className="font-medium truncate">
                       {user?.name || "My Store"}
                     </p>
-                    <Badge variant="secondary" className="text-xs">Vendor</Badge>
+                    <Badge variant="secondary" className="text-xs">Seller</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground truncate">
                     {user?.email || user?.phone}
@@ -88,7 +90,7 @@ export default function VendorLayout({
           <nav className="space-y-1">
             {sidebarLinks.map(({ href, label, icon: Icon }) => {
               const isActive = pathname === href ||
-                (href !== "/vendor" && pathname.startsWith(href))
+                (href !== "/seller" && pathname.startsWith(href))
               return (
                 <Link
                   key={href}

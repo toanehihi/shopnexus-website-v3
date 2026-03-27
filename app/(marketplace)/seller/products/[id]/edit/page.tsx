@@ -154,7 +154,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       specifications: specifications.filter((s) => s.name && s.value),
     })
 
-    router.push("/vendor/products")
+    router.push("/seller/products")
   }
 
   const handleOpenSKUDialog = (sku?: ProductSku) => {
@@ -252,7 +252,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           The product you&apos;re looking for doesn&apos;t exist or has been removed.
         </p>
         <Button asChild>
-          <Link href="/vendor/products">Back to Products</Link>
+          <Link href="/seller/products">Back to Products</Link>
         </Button>
       </div>
     )
@@ -262,7 +262,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/vendor/products">
+          <Link href="/seller/products">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -538,7 +538,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         {/* Actions */}
         <div className="flex items-center justify-end gap-4">
           <Button type="button" variant="outline" asChild>
-            <Link href="/vendor/products">Cancel</Link>
+            <Link href="/seller/products">Cancel</Link>
           </Button>
           <Button
             type="submit"

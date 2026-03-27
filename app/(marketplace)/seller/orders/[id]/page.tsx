@@ -2,21 +2,12 @@
 
 import { use } from "react"
 import Link from "next/link"
-import { useGetOrder, OrderStatus, TOrder } from "@/core/order/order.customer"
-import { useConfirmOrder } from "@/core/order/order.vendor"
+import { useGetOrder, TOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   ArrowLeft,
   Package,
@@ -24,43 +15,32 @@ import {
   MapPin,
   CreditCard,
   User,
-  Calendar,
   CheckCircle,
   Clock,
   XCircle,
-  Loader2,
   Copy,
   ShoppingCart,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
-import { useState } from "react"
 
-const statusConfig: Record<OrderStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType; color: string }> = {
-  [OrderStatus.Pending]: { label: "Pending", variant: "secondary", icon: Clock, color: "text-yellow-600" },
-  [OrderStatus.Confirmed]: { label: "Confirmed", variant: "default", icon: CheckCircle, color: "text-blue-600" },
-  [OrderStatus.Shipped]: { label: "Shipped", variant: "default", icon: Truck, color: "text-purple-600" },
-  [OrderStatus.Delivered]: { label: "Delivered", variant: "outline", icon: Package, color: "text-green-600" },
-  [OrderStatus.Cancelled]: { label: "Cancelled", variant: "destructive", icon: XCircle, color: "text-red-600" },
+const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType; color: string }> = {
+  Pending: { label: "Pending", variant: "secondary", icon: Clock, color: "text-yellow-600" },
+  Confirmed: { label: "Confirmed", variant: "default", icon: CheckCircle, color: "text-blue-600" },
+  Shipped: { label: "Shipped", variant: "default", icon: Truck, color: "text-purple-600" },
+  Delivered: { label: "Delivered", variant: "outline", icon: Package, color: "text-green-600" },
+  Cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle, color: "text-red-600" },
 }
 
 const steps = [
-  { status: OrderStatus.Pending, label: "Order Placed" },
-  { status: OrderStatus.Confirmed, label: "Confirmed" },
-  { status: OrderStatus.Shipped, label: "Shipped" },
-  { status: OrderStatus.Delivered, label: "Delivered" },
+  { status: "Pending", label: "Order Placed" },
+  { status: "Confirmed", label: "Confirmed" },
+  { status: "Shipped", label: "Shipped" },
+  { status: "Delivered", label: "Delivered" },
 ]
 
-export default function VendorOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function SellerOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { data: order, isLoading } = useGetOrder(id)
-  const confirmMutation = useConfirmOrder()
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-
-  const handleConfirm = async () => {
-    if (!order) return
-    await confirmMutation.mutateAsync({ order_id: order.id })
-    setShowConfirmDialog(false)
-  }
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -77,8 +57,8 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
     navigator.clipboard.writeText(text)
   }
 
-  const getCurrentStep = (status: OrderStatus) => {
-    if (status === OrderStatus.Cancelled) return -1
+  const getCurrentStep = (status: string) => {
+    if (status === "Cancelled") return -1
     return steps.findIndex((s) => s.status === status)
   }
 
@@ -111,13 +91,13 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
           The order you&apos;re looking for doesn&apos;t exist or has been removed.
         </p>
         <Button asChild>
-          <Link href="/vendor/orders">Back to Orders</Link>
+          <Link href="/seller/orders">Back to Orders</Link>
         </Button>
       </div>
     )
   }
 
-  const status = statusConfig[order.status]
+  const status = statusConfig[order.status] ?? statusConfig.Pending
   const StatusIcon = status.icon
   const currentStep = getCurrentStep(order.status)
 
@@ -127,7 +107,7 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/vendor/orders">
+            <Link href="/seller/orders">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -152,17 +132,16 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
             <StatusIcon className="h-3 w-3" />
             {status.label}
           </Badge>
-          {order.status === OrderStatus.Pending && (
-            <Button onClick={() => setShowConfirmDialog(true)}>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Confirm Order
-            </Button>
+          {order.payment === null && (
+            <Badge variant="destructive" className="font-normal">
+              Unpaid
+            </Badge>
           )}
         </div>
       </div>
 
       {/* Progress Tracker */}
-      {order.status !== OrderStatus.Cancelled && (
+      {order.status !== "Cancelled" && (
         <Card>
           <CardContent className="p-6">
             <div className="flex justify-between relative">
@@ -246,11 +225,11 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
             </CardContent>
           </Card>
 
-          {/* Customer Note */}
+          {/* Order Note */}
           {order.note && (
             <Card>
               <CardHeader>
-                <CardTitle>Customer Note</CardTitle>
+                <CardTitle>Order Note</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">{order.note}</p>
@@ -261,16 +240,16 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
 
         {/* Order Summary Sidebar */}
         <div className="space-y-6">
-          {/* Customer Info */}
+          {/* Buyer Info */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
-                Customer
+                Buyer
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium">Customer #{order.customer_id.slice(0, 8)}</p>
+              <p className="font-medium">Buyer #{order.buyer_id.slice(0, 8)}</p>
             </CardContent>
           </Card>
 
@@ -287,6 +266,23 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
             </CardContent>
           </Card>
 
+          {/* Transport Info */}
+          {order.transport_id && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-5 w-5" />
+                  Transport
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  ID: {order.transport_id.slice(0, 8)}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Payment Info */}
           <Card>
             <CardHeader>
@@ -296,14 +292,20 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Method</span>
-                <span>{order.payment.option}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant="outline">{order.payment.status}</Badge>
-              </div>
+              {order.payment ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Method</span>
+                    <span>{order.payment.option}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <Badge variant="outline">{order.payment.status}</Badge>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Awaiting payment from buyer</p>
+              )}
             </CardContent>
           </Card>
 
@@ -325,14 +327,8 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Shipping</span>
-                <span>{formatPrice(order.ship_cost)}</span>
+                <span>{formatPrice(order.transport_cost)}</span>
               </div>
-              {order.ship_discount > 0 && (
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>Shipping Discount</span>
-                  <span>-{formatPrice(order.ship_discount)}</span>
-                </div>
-              )}
               <Separator className="my-2" />
               <div className="flex justify-between font-medium">
                 <span>Total</span>
@@ -342,37 +338,6 @@ export default function VendorOrderDetailPage({ params }: { params: Promise<{ id
           </Card>
         </div>
       </div>
-
-      {/* Confirm Order Dialog */}
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Order</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to confirm this order? This will notify the customer
-              and begin the fulfillment process.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirm} disabled={confirmMutation.isPending}>
-              {confirmMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Confirming...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Confirm Order
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useListRefundsVendor, useConfirmRefundVendor, useCancelRefundVendor, TRefund, RefundMethod } from "@/core/order/refund.vendor"
+import { useListRefundsSeller, useConfirmRefundSeller, useCancelRefundSeller, TRefund, RefundMethod } from "@/core/order/refund.seller"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -49,18 +49,18 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   Completed: { label: "Completed", variant: "outline", icon: Package },
 }
 
-export default function VendorRefundsPage() {
+export default function SellerRefundsPage() {
   const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
   const [selectedRefund, setSelectedRefund] = useState<TRefund | null>(null)
   const [actionType, setActionType] = useState<"approve" | "reject" | null>(null)
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListRefundsVendor({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListRefundsSeller({
     limit: 20,
     ...(activeTab !== "all" ? { status: activeTab } : {}),
   })
-  const confirmMutation = useConfirmRefundVendor()
-  const cancelMutation = useCancelRefundVendor()
+  const confirmMutation = useConfirmRefundSeller()
+  const cancelMutation = useCancelRefundSeller()
 
   const refunds = data?.pages.flatMap((page) => page.data) ?? []
 
@@ -259,7 +259,7 @@ export default function VendorRefundsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link href={`/vendor/orders/${refund.order_id}`}>
+                            <Link href={`/seller/orders/${refund.order_id}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Order
                             </Link>

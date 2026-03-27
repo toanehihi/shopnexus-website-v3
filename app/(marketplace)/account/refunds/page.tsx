@@ -6,7 +6,7 @@ import {
   useListRefunds,
   useCancelRefund,
   TRefund,
-} from "@/core/order/refund.customer"
+} from "@/core/order/refund.buyer"
 import { Status } from "@/core/common/status.type"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
