@@ -30,6 +30,7 @@ export type TPayment = {
   id: string
   account_id: string
   option: string
+  payment_method_id?: string
   status: string
   amount: number
   data: Record<string, any>

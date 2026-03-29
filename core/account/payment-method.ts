@@ -7,9 +7,17 @@ import { customFetchStandard, customFetchPagination } from '@/lib/queryclient/cu
 export type PaymentMethod = {
   id: string // UUID
   account_id: string // UUID
-  type: string
+  type: "card" | "ewallet" | "bank"
+  provider: string
   label: string
-  data: Record<string, unknown>
+  data: {
+    token?: string
+    brand?: string
+    last4?: string
+    exp_month?: number
+    exp_year?: number
+    card_type?: "credit" | "debit"
+  }
   is_default: boolean
   date_created: string
   date_updated: string
@@ -26,10 +34,21 @@ export const useListPaymentMethods = () =>
     },
   })
 
+export const useTokenizeCard = () =>
+  useMutation({
+    mutationFn: async (params: { return_url?: string }) => {
+      return customFetchStandard<{ form_url?: string; client_config?: Record<string, unknown> }>(
+        'account/payment-method/tokenize',
+        { method: 'POST', body: JSON.stringify(params) }
+      )
+    },
+  })
+
 export const useCreatePaymentMethod = () =>
   useMutation({
     mutationFn: async (params: {
       type: string
+      provider: string
       label: string
       data: Record<string, unknown>
       is_default?: boolean
