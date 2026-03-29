@@ -153,8 +153,8 @@ function ConversationItem({
   currentUserId: string
   onClick: () => void
 }) {
-  const isCustomer = conversation.customer_id === currentUserId
-  const partnerId = isCustomer ? conversation.vendor_id : conversation.customer_id
+  const isCustomer = conversation.buyer_id === currentUserId
+  const partnerId = isCustomer ? conversation.seller_id : conversation.buyer_id
   const partnerLabel = isCustomer ? "Seller" : "Buyer"
   const partnerInitial = partnerLabel.charAt(0)
   const truncatedId = partnerId.slice(0, 8)
@@ -231,8 +231,8 @@ function MessagePanel({
     )
   }, [messagesData])
 
-  const isCustomer = conversation.customer_id === currentUserId
-  const partnerId = isCustomer ? conversation.vendor_id : conversation.customer_id
+  const isCustomer = conversation.buyer_id === currentUserId
+  const partnerId = isCustomer ? conversation.seller_id : conversation.buyer_id
   const partnerLabel = isCustomer ? "Seller" : "Buyer"
   const partnerInitial = partnerLabel.charAt(0)
 

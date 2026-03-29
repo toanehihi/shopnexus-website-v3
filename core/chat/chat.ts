@@ -8,8 +8,8 @@ import { PaginationParams } from '@/lib/queryclient/response.type'
 
 export type Conversation = {
   id: string
-  customer_id: string
-  vendor_id: string
+  buyer_id: string
+  seller_id: string
   last_message_at: string | null
   date_created: string
 }
