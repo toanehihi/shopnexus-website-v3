@@ -1,14 +1,26 @@
 "use client"
 
-import { use } from "react"
+import { use, useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useGetOrder, usePayOrders } from "@/core/order/order.buyer"
+import { useListPaymentMethods } from "@/core/account/payment-method"
+import { useListServiceOption } from "@/core/common/option"
 import { formatPrice } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 import {
   ChevronLeft,
   Package,
@@ -46,6 +58,19 @@ export default function OrderDetailPage({
   const { id } = use(params)
   const { data: order, isLoading, error } = useGetOrder(id)
   const payMutation = usePayOrders()
+  const [showPayDialog, setShowPayDialog] = useState(false)
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
+  const { data: paymentMethods } = useListPaymentMethods()
+  const { data: serviceOptions } = useListServiceOption({ category: "payment" })
+
+  useEffect(() => {
+    if (paymentMethods && paymentMethods.length > 0) {
+      const defaultMethod = paymentMethods.find((pm) => pm.is_default)
+      if (defaultMethod) {
+        setSelectedPaymentOption(`pm:${defaultMethod.id}`)
+      }
+    }
+  }, [paymentMethods])
 
   if (isLoading) {
     return <OrderDetailSkeleton />
@@ -69,11 +94,13 @@ export default function OrderDetailPage({
   const isCancelled = order.status === "Cancelled"
 
   const handlePay = async () => {
+    if (!selectedPaymentOption) return
     try {
       const result = await payMutation.mutateAsync({
         order_ids: [order.id],
-        payment_option: "default",
+        payment_option: selectedPaymentOption,
       })
+      setShowPayDialog(false)
       if (result.url) {
         window.location.href = result.url
       } else {
@@ -127,18 +154,9 @@ export default function OrderDetailPage({
                 </p>
               </div>
             </div>
-            <Button onClick={handlePay} disabled={payMutation.isPending}>
-              {payMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Pay Now
-                </>
-              )}
+            <Button onClick={() => setShowPayDialog(true)}>
+              <CreditCard className="h-4 w-4 mr-2" />
+              Pay Now
             </Button>
           </CardContent>
         </Card>
@@ -224,8 +242,12 @@ export default function OrderDetailPage({
             <CardContent className="space-y-4">
               {order.items.map((item) => (
                 <div key={item.id} className="flex gap-4">
-                  <div className="h-20 w-20 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                    <Package className="h-8 w-8 text-muted-foreground" />
+                  <div className="relative h-20 w-20 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    {item.resources?.[0] ? (
+                      <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded-lg" />
+                    ) : (
+                      <Package className="h-8 w-8 text-muted-foreground" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{item.sku_name}</p>
@@ -334,18 +356,9 @@ export default function OrderDetailPage({
           {/* Actions */}
           <div className="space-y-2">
             {order.payment === null && (
-              <Button className="w-full" onClick={handlePay} disabled={payMutation.isPending}>
-                {payMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Pay Now
-                  </>
-                )}
+              <Button className="w-full" onClick={() => setShowPayDialog(true)}>
+                <CreditCard className="h-4 w-4 mr-2" />
+                Pay Now
               </Button>
             )}
             {order.status === "Delivered" && (
@@ -361,6 +374,109 @@ export default function OrderDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Payment Method Selection Dialog */}
+      <Dialog
+        open={showPayDialog}
+        onOpenChange={(open) => {
+          if (!open) setShowPayDialog(false)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Payment Method</DialogTitle>
+          </DialogHeader>
+
+          <RadioGroup
+            value={selectedPaymentOption}
+            onValueChange={setSelectedPaymentOption}
+            className="space-y-2"
+          >
+            {/* Saved Cards */}
+            {paymentMethods && paymentMethods.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Saved Cards</p>
+                {paymentMethods.map((pm) => (
+                  <Label
+                    key={pm.id}
+                    htmlFor={`pm-${pm.id}`}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                      selectedPaymentOption === `pm:${pm.id}` && "border-primary bg-accent/30"
+                    )}
+                  >
+                    <RadioGroupItem value={`pm:${pm.id}`} id={`pm-${pm.id}`} />
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <span className="font-medium">
+                        {pm.data.brand ?? pm.provider} **** {pm.data.last4}
+                      </span>
+                      {pm.data.exp_month && pm.data.exp_year && (
+                        <p className="text-xs text-muted-foreground">
+                          Expires {String(pm.data.exp_month).padStart(2, "0")}/{pm.data.exp_year}
+                        </p>
+                      )}
+                    </div>
+                    {pm.is_default && (
+                      <Badge variant="secondary" className="text-xs">Default</Badge>
+                    )}
+                  </Label>
+                ))}
+              </div>
+            )}
+
+            {/* Other Payment Methods */}
+            {serviceOptions && serviceOptions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Other Payment Methods</p>
+                {serviceOptions.map((option) => (
+                  <Label
+                    key={option.id}
+                    htmlFor={`so-${option.id}`}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                      selectedPaymentOption === option.id && "border-primary bg-accent/30"
+                    )}
+                  >
+                    <RadioGroupItem value={option.id} id={`so-${option.id}`} />
+                    <div>
+                      <span className="font-medium">{option.name}</span>
+                      {option.description && (
+                        <p className="text-xs text-muted-foreground">{option.description}</p>
+                      )}
+                    </div>
+                  </Label>
+                ))}
+              </div>
+            )}
+          </RadioGroup>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowPayDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedPaymentOption || payMutation.isPending}
+              onClick={handlePay}
+            >
+              {payMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Pay Now
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
