@@ -1,36 +1,49 @@
 "use client"
 
-import { useListProductCards, useListProductCardsRecommended } from "@/core/catalog/product.customer"
+import { useListProductCardsRecommended } from "@/core/catalog/product.customer"
 import { useListCategories } from "@/core/catalog/category"
-import { ProductGrid } from "@/components/product/product-grid"
 import { ProductCard, ProductCardSkeleton } from "@/components/product/product-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, Sparkles, Truck, Shield, RotateCcw, ChevronRight } from "lucide-react"
+import { ArrowRight, Sparkles, Truck, Shield, RotateCcw, ChevronRight, Loader2 } from "lucide-react"
 import Link from "next/link"
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
+import { useInView } from "react-intersection-observer"
+
+const BATCH_SIZE = 12
+const AUTO_SCROLL_LIMIT = 3
 
 export default function HomePage() {
-  const {
-    data: productsData,
-    isLoading: isLoadingProducts,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage
-  } = useListProductCards({ limit: 24 })
-
-  const { data: recommendedData, isLoading: isLoadingRecommended } = useListProductCardsRecommended({ limit: 12 })
+  const { data: allProducts, isLoading: isLoadingRecommended } = useListProductCardsRecommended({ limit: 100 })
 
   const { data: categoriesData, isLoading: isLoadingCategories } = useListCategories({ limit: 12 })
-
-  const products = useMemo(() => {
-    return productsData?.pages.flatMap(page => page.data) ?? []
-  }, [productsData])
 
   const categories = useMemo(() => {
     return categoriesData?.pages.flatMap(page => page.data) ?? []
   }, [categoriesData])
+
+  // Client-side batching: reveal BATCH_SIZE items at a time
+  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE)
+  const [autoScrollCount, setAutoScrollCount] = useState(0)
+
+  const products = allProducts?.slice(0, visibleCount) ?? []
+  const hasMore = allProducts ? visibleCount < allProducts.length : false
+  const canAutoFetch = autoScrollCount < AUTO_SCROLL_LIMIT
+
+  const { ref: sentinelRef, inView } = useInView()
+
+  useEffect(() => {
+    if (inView && canAutoFetch && hasMore) {
+      setVisibleCount(prev => prev + BATCH_SIZE)
+      setAutoScrollCount(prev => prev + 1)
+    }
+  }, [inView, canAutoFetch, hasMore])
+
+  const handleShowMore = () => {
+    setAutoScrollCount(0)
+    setVisibleCount(prev => prev + BATCH_SIZE)
+  }
 
   return (
     <div className="space-y-8 pb-8">
@@ -135,47 +148,42 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Recommended Products */}
-      {(isLoadingRecommended || (recommendedData && recommendedData.length > 0)) && (
-        <section className="container mx-auto px-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <h2 className="text-xl font-bold">Recommended for You</h2>
-          </div>
-
-          {isLoadingRecommended ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <ProductCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {recommendedData?.slice(0, 6).map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* All Products */}
+      {/* Recommended Products - Client-side infinite scroll */}
       <section className="container mx-auto px-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">All Products</h2>
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h2 className="text-xl font-bold">Recommended for You</h2>
         </div>
 
-        <ProductGrid
-          products={products}
-          isLoading={isLoadingProducts}
-          isFetchingNextPage={isFetchingNextPage}
-          hasNextPage={hasNextPage}
-          onLoadMore={() => fetchNextPage()}
-          skeletonCount={12}
-        />
+        {isLoadingRecommended ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <ProductCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+
+            {/* Sentinel for auto-reveal via intersection observer */}
+            {canAutoFetch && hasMore && (
+              <div ref={sentinelRef} className="h-px" />
+            )}
+
+            {/* Show More button after 3 auto-scrolls */}
+            {!canAutoFetch && hasMore && (
+              <div className="flex justify-center pt-6">
+                <Button variant="outline" size="lg" onClick={handleShowMore}>
+                  Show More
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       {/* CTA Banner */}

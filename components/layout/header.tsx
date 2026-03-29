@@ -232,9 +232,6 @@ export function Header() {
 											</Link>
 										</DropdownMenuItem>
 										<DropdownMenuItem asChild>
-											<Link href="/account/orders">My Orders</Link>
-										</DropdownMenuItem>
-										<DropdownMenuItem asChild>
 											<Link href="/account/wishlist">
 												<Heart className="h-4 w-4 mr-2" />
 												Wishlist
@@ -266,9 +263,6 @@ export function Header() {
 											<Link href="/register">Create Account</Link>
 										</DropdownMenuItem>
 										<DropdownMenuSeparator />
-										<DropdownMenuItem asChild>
-											<Link href="/account/orders">My Orders</Link>
-										</DropdownMenuItem>
 										<DropdownMenuItem asChild>
 											<Link href="/account/wishlist">Wishlist</Link>
 										</DropdownMenuItem>

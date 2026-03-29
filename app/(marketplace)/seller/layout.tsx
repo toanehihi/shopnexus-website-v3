@@ -6,10 +6,12 @@ import { useGetMe } from "@/core/account/account"
 import { useSignOut } from "@/core/account/auth"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
+  User,
   Package,
   ShoppingCart,
   RotateCcw,
@@ -22,15 +24,19 @@ import {
   Inbox,
 } from "lucide-react"
 
-const sidebarLinks = [
+const personalLinks = [
+  { href: "/account/profile", label: "Profile", icon: User },
+  { href: "/account/chat", label: "Chat", icon: MessageCircle },
+  { href: "/seller/settings", label: "Settings", icon: Settings },
+]
+
+const sellerLinks = [
   { href: "/seller", label: "Dashboard", icon: BarChart3 },
   { href: "/seller/products", label: "Products", icon: Package },
   { href: "/seller/incoming", label: "Incoming Items", icon: Inbox },
   { href: "/seller/orders", label: "Orders", icon: ShoppingCart },
   { href: "/seller/refunds", label: "Refunds", icon: RotateCcw },
   { href: "/seller/promotions", label: "Promotions", icon: Tag },
-  { href: "/account/chat", label: "Chat", icon: MessageCircle },
-  { href: "/seller/settings", label: "Settings", icon: Settings },
 ]
 
 export default function SellerLayout({
@@ -47,6 +53,19 @@ export default function SellerLayout({
     await signOut.mutateAsync()
     router.push("/")
   }
+
+  const isLinkActive = (href: string) => {
+    if (href === "/seller") return pathname === href
+    return pathname.startsWith(href)
+  }
+
+  const linkClass = (href: string) =>
+    cn(
+      "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors",
+      isLinkActive(href)
+        ? "bg-primary text-primary-foreground"
+        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+    )
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -88,35 +107,31 @@ export default function SellerLayout({
 
           {/* Navigation */}
           <nav className="space-y-1">
-            {sidebarLinks.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname === href ||
-                (href !== "/seller" && pathname.startsWith(href))
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </Link>
-              )
-            })}
-
-            <div className="pt-4 border-t mt-4">
-              <Link
-                href="/account"
-                className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <Store className="h-4 w-4" />
-                Switch to Buyer
+            {personalLinks.map(({ href, label, icon: Icon }) => (
+              <Link key={href} href={href} className={linkClass(href)}>
+                <Icon className="h-4 w-4" />
+                {label}
               </Link>
-            </div>
+            ))}
+
+            <Separator className="!my-3" />
+
+            {sellerLinks.map(({ href, label, icon: Icon }) => (
+              <Link key={href} href={href} className={linkClass(href)}>
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+            ))}
+
+            <Separator className="!my-3" />
+
+            <Link
+              href="/account"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Switch to Buyer
+            </Link>
 
             <Button
               variant="ghost"
