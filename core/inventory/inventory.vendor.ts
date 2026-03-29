@@ -20,6 +20,7 @@ export interface Stock {
   ref_id: string
   stock: number
   taken: number
+  serial_required: boolean
   date_created: string
 }
 
@@ -56,17 +57,34 @@ export function useListStockHistory(params: PaginationParams<{
 }
 
 export function useListProductSerials(params: PaginationParams<{
-  ref_id: string
-  ref_type: "ProductSku" | "Promotion"
+  stock_id: number
 }>) {
   return useInfiniteQueryPagination<Serial>(
-    ["inventory", "serials"],
+    ["inventory", "serials", params.stock_id],
     "inventory/serial",
     params,
     {
-      enabled: !!params.ref_id && !!params.ref_type,
+      enabled: !!params.stock_id,
     }
   )
+}
+
+export function useUpdateStockSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      ref_id: string
+      ref_type: "ProductSku" | "Promotion"
+      serial_required: boolean
+    }) =>
+      customFetchStandard<Stock>('inventory/stock', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory", "stock"] })
+    },
+  })
 }
 
 // Mutation functions
@@ -85,10 +103,10 @@ export function useImportStock() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ["inventory", "serials"] })
       queryClient.invalidateQueries({ queryKey: ["inventory", "stock"] })
       queryClient.invalidateQueries({ queryKey: ["inventory", "stock-history"] })
+      queryClient.invalidateQueries({ queryKey: ["product-sku"] })
     },
   })
 }
