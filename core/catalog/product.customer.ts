@@ -4,7 +4,6 @@ import { useInfiniteQueryPagination } from "@/lib/queryclient/use-infinite-query
 import qs from "qs"
 import { PaginationParams, SuccessPaginationRes, SuccessResponse } from "@/lib/queryclient/response.type"
 import { Resource } from "../common/resource.type"
-import { Brand } from "./brand"
 import { Category } from "./category"
 
 // ===== Types =====
@@ -15,9 +14,9 @@ export type TProductDetail = {
   vendor_id: string
   name: string
   description: string
-  brand: Brand
   is_active: boolean
   category: Category
+  is_favorite: boolean
   rating: TRating
   resources: Resource[]
   promotions: {
@@ -31,8 +30,10 @@ export type TProductDetail = {
     original_price: number
     attributes: { name: string; value: string }[]
     taken: number
+    stock: number
   }[]
   specifications: { name: string; value: string }[]
+  tags: string[]
 }
 
 export type TProductCard = {
@@ -40,7 +41,6 @@ export type TProductCard = {
   slug: string
   vendor_id: string
   category_id: string
-  brand_id: string
   name: string
   description: string
   is_active: boolean
@@ -50,7 +50,9 @@ export type TProductCard = {
 
   price: number
   original_price: number
+  sold: number
   rating: TRating
+  is_favorite: boolean
   resources: Resource[]
   promotions: TProductCardPromotion[]
 }
@@ -98,6 +100,7 @@ export const useListProductCardsRecommended = (params: { limit?: number }) =>
     queryFn: async () => customFetchStandard<TProductCard[]>(`catalog/product-card/recommended?${qs.stringify(params)}`),
   })
 
+
 export const useGetProductDetail = ({
   id,
   slug,
@@ -110,4 +113,18 @@ export const useGetProductDetail = ({
     queryFn: () => customFetchStandard<TProductDetail>(`catalog/product-detail?${qs.stringify({ id, slug })}`),
   })
 
+// ===== Vendor Stats =====
 
+export type TVendorStats = {
+  product_count: number
+  average_rating: number
+  total_sold: number
+  response_rate: number
+}
+
+export const useGetVendorStats = (accountId: string) =>
+  useQuery({
+    queryKey: ['vendor', 'stats', accountId],
+    queryFn: () => customFetchStandard<TVendorStats>(`catalog/vendor-stats?account_id=${accountId}`),
+    enabled: !!accountId,
+  })

@@ -5,7 +5,6 @@ import { PaginationParams } from "@/lib/queryclient/response.type"
 import qs from "qs"
 import { Resource } from "../common/resource.type"
 import { Category } from "./category"
-import { Brand } from "./brand"
 import { TProductCardPromotion as TProductPromotion, TRating } from "./product.customer"
 
 // ===== Types =====
@@ -44,7 +43,6 @@ export type ProductSPU = {
   account_id: string
   slug: string
   category: Category
-  brand: Brand
   featured_sku_id: string | null
   name: string
   description: string
@@ -56,19 +54,22 @@ export type ProductSPU = {
   tags: string[]
   resources: Resource[]
   specifications?: ProductSpecification[]
+
+  is_stale_embedding: boolean
+  is_stale_metadata: boolean
 }
 
 // ===== Hooks =====
 
 // List Product SPU (Infinite Query)
 export const useListProductSPU = (params: PaginationParams<{
-  code?: string[]
+  search?: string
+  my_products?: boolean
   category_id?: string[]
-  brand_id?: string[]
   is_active?: boolean[]
 }>) =>
   useInfiniteQueryPagination<ProductSPU>(
-    ['product-spu', 'list'],
+    ['product-spu', 'list', params],
     'catalog/product-spu',
     params
   )
@@ -79,7 +80,6 @@ export const useCreateProductSPU = () => {
   return useMutation({
     mutationFn: (params: {
       category_id: string
-      brand_id: string
       name: string
       description: string
       is_active: boolean
@@ -105,10 +105,10 @@ export const useUpdateProductSPU = () => {
       id: string
       category_id?: string
       featured_sku_id?: string
-      brand_id?: string
       name?: string
       description?: string
       is_active?: boolean
+      regenerate_slug?: boolean
       tags?: string[]
       resource_ids?: string[]
       specifications?: Array<{ name: string; value: string }>
