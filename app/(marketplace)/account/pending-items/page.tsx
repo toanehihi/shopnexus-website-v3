@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   useListPendingItems,
   useCancelPendingItem,
@@ -216,8 +217,12 @@ function ItemList({
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="flex gap-3 flex-1">
-                  <div className="h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                    <Package className="h-6 w-6 text-muted-foreground" />
+                  <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                    {item.resources?.[0] ? (
+                      <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
+                    ) : (
+                      <Package className="h-6 w-6 text-muted-foreground" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">

@@ -247,6 +247,16 @@ function OrderList({
                     Pay
                   </Button>
                 )}
+                {order.payment?.status === "Pending" && order.payment?.data?.redirect_url && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => window.open(order.payment!.data.redirect_url, "_blank")}
+                  >
+                    <CreditCard className="h-4 w-4 mr-1" />
+                    Complete Payment
+                  </Button>
+                )}
                 {order.status === "Delivered" && (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/account/orders/${order.id}/refund`}>
@@ -378,8 +388,9 @@ function OrderList({
                     payment_option: selectedPaymentOption,
                   })
                   setPayingOrderId(null)
-                  if (result.url) {
-                    window.location.href = result.url
+                  if (result.redirect_url) {
+                    window.open(result.redirect_url, "_blank")
+                    toast.success("Payment page opened in a new tab.")
                   } else {
                     toast.success("Payment initiated successfully.")
                   }

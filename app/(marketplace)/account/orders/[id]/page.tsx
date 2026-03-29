@@ -101,8 +101,9 @@ export default function OrderDetailPage({
         payment_option: selectedPaymentOption,
       })
       setShowPayDialog(false)
-      if (result.url) {
-        window.location.href = result.url
+      if (result.redirect_url) {
+        window.open(result.redirect_url, "_blank")
+        toast.success("Payment page opened in a new tab.")
       } else {
         toast.success("Payment initiated successfully.")
       }
@@ -157,6 +158,25 @@ export default function OrderDetailPage({
             <Button onClick={() => setShowPayDialog(true)}>
               <CreditCard className="h-4 w-4 mr-2" />
               Pay Now
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {order.payment?.status === "Pending" && order.payment?.data?.redirect_url && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CreditCard className="h-8 w-8 text-blue-600" />
+              <div>
+                <p className="font-medium text-blue-900">Payment Pending</p>
+                <p className="text-sm text-blue-700">
+                  Complete your payment on the provider&apos;s page.
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => window.open(order.payment!.data.redirect_url, "_blank")}>
+              <CreditCard className="h-4 w-4 mr-2" />
+              Complete Payment
             </Button>
           </CardContent>
         </Card>
@@ -359,6 +379,12 @@ export default function OrderDetailPage({
               <Button className="w-full" onClick={() => setShowPayDialog(true)}>
                 <CreditCard className="h-4 w-4 mr-2" />
                 Pay Now
+              </Button>
+            )}
+            {order.payment?.status === "Pending" && order.payment?.data?.redirect_url && (
+              <Button className="w-full" onClick={() => window.open(order.payment!.data.redirect_url, "_blank")}>
+                <CreditCard className="h-4 w-4 mr-2" />
+                Complete Payment
               </Button>
             )}
             {order.status === "Delivered" && (
