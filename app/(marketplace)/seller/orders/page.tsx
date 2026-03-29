@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useDebounceValue } from "usehooks-ts"
 import Link from "next/link"
+import Image from "next/image"
 import { useListSellerOrders } from "@/core/order/order.seller"
 import { TOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
@@ -40,22 +42,19 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 
 export default function SellerOrdersPage() {
   const [search, setSearch] = useState("")
+  const [debouncedSearch] = useDebounceValue(search, 300)
   const [activeTab, setActiveTab] = useState("all")
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListSellerOrders({
     limit: 20,
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(activeTab !== "all" ? { order_status: [activeTab] } : {}),
   })
 
-  const orders = useMemo(
+  const filteredOrders = useMemo(
     () => data?.pages.flatMap((page) => page.data) ?? [],
     [data]
   )
-
-  const filteredOrders = orders.filter((order) => {
-    const matchesSearch = order.id.toLowerCase().includes(search.toLowerCase())
-    const matchesTab = activeTab === "all" || order.status === activeTab
-    return matchesSearch && matchesTab
-  })
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -184,9 +183,13 @@ export default function SellerOrdersPage() {
                       {order.items.slice(0, 4).map((item) => (
                         <div
                           key={item.id}
-                          className="flex-shrink-0 h-12 w-12 rounded bg-muted flex items-center justify-center"
+                          className="relative flex-shrink-0 h-12 w-12 rounded bg-muted flex items-center justify-center"
                         >
-                          <Package className="h-5 w-5 text-muted-foreground" />
+                          {item.resources?.[0] ? (
+                            <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
+                          ) : (
+                            <Package className="h-5 w-5 text-muted-foreground" />
+                          )}
                         </div>
                       ))}
                       {order.items.length > 4 && (

@@ -2,6 +2,7 @@
 
 import { use } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useGetOrder, TOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -202,8 +203,12 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
                   key={item.id}
                   className="flex gap-4 p-4 bg-muted/50 rounded-lg"
                 >
-                  <div className="h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                    <Package className="h-6 w-6 text-muted-foreground" />
+                  <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                    {item.resources?.[0] ? (
+                      <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
+                    ) : (
+                      <Package className="h-6 w-6 text-muted-foreground" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-medium truncate">{item.sku_name}</h4>
