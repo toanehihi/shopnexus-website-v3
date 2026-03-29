@@ -6,7 +6,9 @@ import { TOrder, TOrderItem } from "./order.buyer"
 
 // ===== Hooks =====
 
-export const useListIncomingItems = (params: PaginationParams<unknown>) =>
+export const useListIncomingItems = (params: PaginationParams<{
+  search?: string
+}>) =>
   useInfiniteQueryPagination<TOrderItem>(
     ['order', 'incoming'],
     'order/incoming',
@@ -51,6 +53,7 @@ export const useRejectItems = () => {
 }
 
 export const useListSellerOrders = (params: PaginationParams<{
+  search?: string
   payment_status?: string[]
   order_status?: string[]
 }>) =>

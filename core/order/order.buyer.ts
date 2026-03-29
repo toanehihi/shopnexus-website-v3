@@ -116,7 +116,7 @@ export const usePayOrders = () => {
       payment_option: string
     }) => customFetchStandard<{
       payment: TPayment
-      url?: string
+      redirect_url?: string
     }>(`order/pay`, {
       method: 'POST',
       body: JSON.stringify(params),
