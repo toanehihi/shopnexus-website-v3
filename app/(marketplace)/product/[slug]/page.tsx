@@ -3,17 +3,30 @@
 import { use, useState, useMemo, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
 	useGetProductDetail,
 	useListProductCardsRecommended,
+	useGetVendorStats,
 } from "@/core/catalog/product.customer"
 import { useGetAccount } from "@/core/account/account"
+import { useAddFavorite, useRemoveFavorite } from "@/core/account/favorite"
+import { useListContacts } from "@/core/account/contact"
 import { useUpdateCart } from "@/core/order/cart"
-import { formatPrice } from "@/lib/utils"
+import { useCheckout } from "@/core/order/order.buyer"
+import { formatPrice, formatSoldCount } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -55,16 +68,25 @@ export default function ProductDetailPage({
 	const { slug } = use(params)
 	const { data: product, isLoading, error } = useGetProductDetail({ slug })
 	const { data: vendor, isLoading: isLoadingVendor } = useGetAccount(product?.vendor_id ?? "")
+	const { data: vendorStats } = useGetVendorStats(product?.vendor_id ?? "")
 	const { data: recommendedProducts, isLoading: isLoadingRecommended } =
 		useListProductCardsRecommended({ limit: 4 })
 	const updateCart = useUpdateCart()
+	const checkout = useCheckout()
+	const router = useRouter()
 	const { openChat } = useChatContext()
+	const addFavorite = useAddFavorite()
+	const removeFavorite = useRemoveFavorite()
+	const { data: contacts } = useListContacts()
 
 	const [selectedAttributes, setSelectedAttributes] = useState<SelectedAttributes>({})
 	const [quantity, setQuantity] = useState(1)
 	const [selectedImageIndex, setSelectedImageIndex] = useState(0)
 	const [isAddingToCart, setIsAddingToCart] = useState(false)
 	const [justAdded, setJustAdded] = useState(false)
+	const [isWishlisted, setIsWishlisted] = useState(false)
+	const [isBuyNowOpen, setIsBuyNowOpen] = useState(false)
+	const [isBuyNowProcessing, setIsBuyNowProcessing] = useState(false)
 
 	// Extract all unique attribute names and their possible values
 	const attributeOptions = useMemo(() => {
@@ -105,6 +127,13 @@ export default function ProductDetailPage({
 			setSelectedAttributes(initial)
 		}
 	}, [product?.skus, attributeNames])
+
+	// Sync wishlist state from product data
+	useEffect(() => {
+		if (product) {
+			setIsWishlisted(product.is_favorite ?? false)
+		}
+	}, [product])
 
 	// Find the matching SKU based on selected attributes
 	const selectedSku = useMemo(() => {
@@ -154,6 +183,39 @@ export default function ProductDetailPage({
 		}))
 	}
 
+	// Computed product stats
+	const totalSold = useMemo(() =>
+		product?.skus?.reduce((sum, sku) => sum + (sku.taken || 0), 0) ?? 0
+	, [product?.skus])
+
+	const priceRange = useMemo(() => {
+		if (!product?.skus || product.skus.length <= 1) return null
+		const prices = product.skus.map(s => s.price)
+		const min = Math.min(...prices)
+		const max = Math.max(...prices)
+		return min < max ? { min, max } : null
+	}, [product?.skus])
+
+	const stockStatus = useMemo(() => {
+		if (!selectedSku) return null
+		const stock = selectedSku.stock ?? 0
+		if (stock <= 0) return { label: "Out of Stock", color: "text-destructive" }
+		if (stock <= 5) return { label: `Only ${stock} left`, color: "text-amber-600" }
+		return { label: "In Stock", color: "text-green-600" }
+	}, [selectedSku])
+
+	const handleShare = async () => {
+		const url = window.location.href
+		if (navigator.share) {
+			try {
+				await navigator.share({ title: product?.name, url })
+			} catch { /* user cancelled */ }
+		} else {
+			await navigator.clipboard.writeText(url)
+			toast.success("Link copied to clipboard")
+		}
+	}
+
 	const discount =
 		selectedSku && selectedSku.original_price > selectedSku.price
 			? Math.round(
@@ -181,6 +243,58 @@ export default function ProductDetailPage({
 			} finally {
 				setIsAddingToCart(false)
 			}
+		}
+	}
+
+	const handleWishlist = async () => {
+		try {
+			if (isWishlisted) {
+				await removeFavorite.mutateAsync(product!.id)
+				setIsWishlisted(false)
+				toast.info("Removed from wishlist")
+			} else {
+				await addFavorite.mutateAsync(product!.id)
+				setIsWishlisted(true)
+				toast.success("Added to wishlist")
+			}
+		} catch {
+			toast.error("Failed to update wishlist")
+		}
+	}
+
+	const handleBuyNow = () => {
+		if (!selectedSku) return
+		setIsBuyNowOpen(true)
+	}
+
+	const handleConfirmBuyNow = async () => {
+		if (!selectedSku) return
+		const defaultContact = contacts?.find((c: any) => c.is_default) || contacts?.[0]
+		if (!defaultContact) {
+			setIsBuyNowOpen(false)
+			toast.error("Please add a shipping address first")
+			router.push("/account/contacts")
+			return
+		}
+		setIsBuyNowProcessing(true)
+		try {
+			await checkout.mutateAsync({
+				buy_now: true,
+				items: [{
+					sku_id: selectedSku.id,
+					quantity,
+					address: defaultContact.address,
+				}],
+			})
+			setIsBuyNowOpen(false)
+			toast.success("Order placed successfully!", {
+				description: `${product?.name} x${quantity} - ${formatPrice(selectedSku.price * quantity)}`,
+			})
+			router.push("/account/pending-items")
+		} catch (err: any) {
+			toast.error(err?.message || "Failed to place order")
+		} finally {
+			setIsBuyNowProcessing(false)
 		}
 	}
 
@@ -227,14 +341,19 @@ export default function ProductDetailPage({
 				<span className="text-foreground truncate max-w-[200px]">{product.name}</span>
 			</nav>
 
-			{/* Mobile Back Button */}
-			<div className="sm:hidden mb-4">
-				<Button variant="ghost" size="sm" asChild className="-ml-2">
-					<Link href="/">
-						<ChevronRight className="h-4 w-4 rotate-180 mr-1" />
-						Back
-					</Link>
-				</Button>
+			{/* Mobile Breadcrumb */}
+			<div className="sm:hidden mb-4 flex items-center gap-1.5 text-xs text-muted-foreground overflow-x-auto">
+				<Link href="/" className="hover:text-primary shrink-0">Home</Link>
+				{product.category && (
+					<>
+						<ChevronRight className="h-3 w-3 shrink-0" />
+						<Link href={`/categories/${product.category.id}`} className="hover:text-primary shrink-0">
+							{product.category.name}
+						</Link>
+					</>
+				)}
+				<ChevronRight className="h-3 w-3 shrink-0" />
+				<span className="text-foreground truncate">{product.name}</span>
 			</div>
 
 			<div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
@@ -289,52 +408,53 @@ export default function ProductDetailPage({
 
 				{/* Product Info */}
 				<div className="space-y-4 sm:space-y-6">
-					{/* Brand */}
-					{product.brand && (
-						<Link
-							href={`/brands/${product.brand.id}`}
-							className="text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
-						>
-							{product.brand.name}
-						</Link>
-					)}
-
 					{/* Title */}
 					<h1 className="text-xl sm:text-2xl lg:text-3xl font-bold leading-tight">{product.name}</h1>
 
-					{/* Rating */}
-					{product.rating && product.rating.total > 0 && (
-						<div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-							<div className="flex items-center gap-0.5 sm:gap-1">
-								{Array.from({ length: 5 }).map((_, i) => (
-									<Star
-										key={i}
-										className={cn(
-											"h-4 w-4 sm:h-5 sm:w-5",
-											i < Math.round(product.rating.score * 5)
-												? "fill-yellow-400 text-yellow-400"
-												: "text-muted-foreground/30"
-										)}
-									/>
-								))}
-							</div>
-							<span className="text-xs sm:text-sm">
-								<span className="font-medium">
-									{(product.rating.score * 5).toFixed(1)}
+					{/* Rating & Sold */}
+					<div className="flex items-center gap-3 sm:gap-4 flex-wrap text-xs sm:text-sm">
+						{product.rating && product.rating.total > 0 && (
+							<>
+								<div className="flex items-center gap-0.5 sm:gap-1">
+									{Array.from({ length: 5 }).map((_, i) => (
+										<Star
+											key={i}
+											className={cn(
+												"h-4 w-4 sm:h-5 sm:w-5",
+												i < Math.round(product.rating.score * 5)
+													? "fill-yellow-400 text-yellow-400"
+													: "text-muted-foreground/30"
+											)}
+										/>
+									))}
+								</div>
+								<span>
+									<span className="font-medium">
+										{(product.rating.score * 5).toFixed(1)}
+									</span>
+									<span className="text-muted-foreground">
+										{" "}({product.rating.total} reviews)
+									</span>
 								</span>
-								<span className="text-muted-foreground">
-									{" "}
-									({product.rating.total} reviews)
-								</span>
+								<Separator orientation="vertical" className="h-4" />
+							</>
+						)}
+						{totalSold > 0 && (
+							<span className="text-muted-foreground">
+								{formatSoldCount(totalSold)} sold
 							</span>
-						</div>
-					)}
+						)}
+					</div>
 
 					{/* Price */}
 					<div className="space-y-1">
 						<div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
 							<span className={cn("text-2xl sm:text-3xl font-bold", discount > 0 && "text-red-600")}>
-								{selectedSku ? formatPrice(selectedSku.price) : "N/A"}
+								{selectedSku
+									? formatPrice(selectedSku.price)
+									: priceRange
+										? `${formatPrice(priceRange.min)} – ${formatPrice(priceRange.max)}`
+										: "N/A"}
 							</span>
 							{selectedSku &&
 								selectedSku.original_price > selectedSku.price && (
@@ -343,14 +463,21 @@ export default function ProductDetailPage({
 									</span>
 								)}
 						</div>
-						{discount > 0 && (
-							<p className="text-xs sm:text-sm text-green-600 font-medium">
-								You save{" "}
-								{formatPrice(
-									(selectedSku?.original_price ?? 0) - (selectedSku?.price ?? 0)
-								)}
-							</p>
-						)}
+						<div className="flex items-center gap-3 flex-wrap">
+							{discount > 0 && (
+								<p className="text-xs sm:text-sm text-green-600 font-medium">
+									You save{" "}
+									{formatPrice(
+										(selectedSku?.original_price ?? 0) - (selectedSku?.price ?? 0)
+									)}
+								</p>
+							)}
+							{stockStatus && (
+								<span className={cn("text-xs sm:text-sm font-medium", stockStatus.color)}>
+									{stockStatus.label}
+								</span>
+							)}
+						</div>
 					</div>
 
 					{/* Promotions */}
@@ -478,12 +605,21 @@ export default function ProductDetailPage({
 					<div className="flex gap-2 sm:gap-3">
 						<Button
 							size="lg"
+							variant="outline"
+							className="flex-1 h-11 sm:h-12 text-sm sm:text-base"
+							onClick={handleBuyNow}
+							disabled={!selectedSku || (selectedSku?.stock ?? 0) <= 0}
+						>
+							Buy Now
+						</Button>
+						<Button
+							size="lg"
 							className={cn(
 								"flex-1 h-11 sm:h-12 text-sm sm:text-base transition-all",
 								justAdded && "bg-green-600 hover:bg-green-700"
 							)}
 							onClick={handleAddToCart}
-							disabled={isAddingToCart || !selectedSku}
+							disabled={isAddingToCart || !selectedSku || (selectedSku?.stock ?? 0) <= 0}
 						>
 							{justAdded ? (
 								<>
@@ -502,10 +638,10 @@ export default function ProductDetailPage({
 								</>
 							)}
 						</Button>
-						<Button size="lg" variant="outline" className="h-11 w-11 sm:h-12 sm:w-12 p-0">
-							<Heart className="h-4 w-4 sm:h-5 sm:w-5" />
+						<Button size="lg" variant="outline" className="h-11 w-11 sm:h-12 sm:w-12 p-0" onClick={handleWishlist}>
+							<Heart className={cn("h-4 w-4 sm:h-5 sm:w-5", isWishlisted && "fill-red-500 text-red-500")} />
 						</Button>
-						<Button size="lg" variant="outline" className="h-11 w-11 sm:h-12 sm:w-12 p-0 hidden sm:flex">
+						<Button size="lg" variant="outline" className="h-11 w-11 sm:h-12 sm:w-12 p-0 hidden sm:flex" onClick={handleShare}>
 							<Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
 						</Button>
 					</div>
@@ -588,15 +724,21 @@ export default function ProductDetailPage({
 								<div className="border-t bg-muted/30 p-4 sm:p-6">
 									<div className="grid grid-cols-3 gap-4 text-center mb-4">
 										<div>
-											<div className="text-base sm:text-lg font-bold text-primary">4.8</div>
+											<div className="text-base sm:text-lg font-bold text-primary">
+												{vendorStats ? (vendorStats.average_rating * 5).toFixed(1) : "–"}
+											</div>
 											<div className="text-[10px] sm:text-xs text-muted-foreground">Rating</div>
 										</div>
 										<div>
-											<div className="text-base sm:text-lg font-bold text-primary">98%</div>
+											<div className="text-base sm:text-lg font-bold text-primary">
+												{vendorStats ? `${Math.round(vendorStats.response_rate * 100)}%` : "–"}
+											</div>
 											<div className="text-[10px] sm:text-xs text-muted-foreground">Response</div>
 										</div>
 										<div>
-											<div className="text-base sm:text-lg font-bold text-primary">1.2k</div>
+											<div className="text-base sm:text-lg font-bold text-primary">
+												{vendorStats ? formatSoldCount(vendorStats.product_count) : "–"}
+											</div>
 											<div className="text-[10px] sm:text-xs text-muted-foreground">Products</div>
 										</div>
 									</div>
@@ -659,6 +801,25 @@ export default function ProductDetailPage({
 							)}
 						</div>
 
+						{/* Tags */}
+						{product.tags && product.tags.length > 0 && (
+							<>
+								<Separator />
+								<div>
+									<h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Tags</h2>
+									<div className="flex flex-wrap gap-2">
+										{product.tags.map((tag) => (
+											<Link key={tag} href={`/search?q=${encodeURIComponent(tag)}`}>
+												<Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 transition-colors">
+													{tag}
+												</Badge>
+											</Link>
+										))}
+									</div>
+								</div>
+							</>
+						)}
+
 						<Separator />
 
 						{/* Description Section */}
@@ -700,6 +861,93 @@ export default function ProductDetailPage({
 					)}
 				</section>
 			)}
+			{/* Buy Now Confirmation Dialog */}
+			<Dialog open={isBuyNowOpen} onOpenChange={(open) => { if (!isBuyNowProcessing) setIsBuyNowOpen(open) }}>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>Confirm Purchase</DialogTitle>
+						<DialogDescription>
+							Review your order before placing it
+						</DialogDescription>
+					</DialogHeader>
+
+					{selectedSku && (
+						<div className="space-y-4 py-2">
+							{/* Product summary */}
+							<div className="flex gap-3">
+								{product.resources?.[0]?.url && (
+									<div className="relative h-16 w-16 rounded-md overflow-hidden bg-muted flex-shrink-0">
+										<Image
+											src={product.resources[0].url}
+											alt={product.name}
+											fill
+											className="object-cover"
+										/>
+									</div>
+								)}
+								<div className="flex-1 min-w-0">
+									<p className="text-sm font-medium line-clamp-2">{product.name}</p>
+									{selectedSku.attributes && selectedSku.attributes.length > 0 && (
+										<p className="text-xs text-muted-foreground mt-0.5">
+											{selectedSku.attributes.map(a => a.value).join(" / ")}
+										</p>
+									)}
+								</div>
+							</div>
+
+							<Separator />
+
+							{/* Price breakdown */}
+							<div className="space-y-2 text-sm">
+								<div className="flex justify-between">
+									<span className="text-muted-foreground">Unit price</span>
+									<span>{formatPrice(selectedSku.price)}</span>
+								</div>
+								<div className="flex justify-between">
+									<span className="text-muted-foreground">Quantity</span>
+									<span>x{quantity}</span>
+								</div>
+								{discount > 0 && (
+									<div className="flex justify-between text-green-600">
+										<span>Discount ({discount}%)</span>
+										<span>-{formatPrice((selectedSku.original_price - selectedSku.price) * quantity)}</span>
+									</div>
+								)}
+								<Separator />
+								<div className="flex justify-between font-semibold text-base">
+									<span>Total</span>
+									<span className={cn(discount > 0 && "text-red-600")}>
+										{formatPrice(selectedSku.price * quantity)}
+									</span>
+								</div>
+							</div>
+						</div>
+					)}
+
+					<DialogFooter className="gap-2 sm:gap-0">
+						<Button
+							variant="outline"
+							onClick={() => setIsBuyNowOpen(false)}
+							disabled={isBuyNowProcessing}
+						>
+							Cancel
+						</Button>
+						<Button
+							onClick={handleConfirmBuyNow}
+							disabled={isBuyNowProcessing}
+						>
+							{isBuyNowProcessing ? (
+								<>
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+									Processing...
+								</>
+							) : (
+								"Place Order"
+							)}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	)
 }

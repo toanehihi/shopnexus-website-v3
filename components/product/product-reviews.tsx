@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Image from "next/image"
 import {
 	useListComments,
@@ -52,11 +52,24 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 	const { data: user } = useGetMe()
 	const isLoggedIn = !!user
 	const [activeFilter, setActiveFilter] = useState<FilterType>("all")
+
+	const scoreFilter = useMemo(() => {
+		const starMap: Record<string, { score_from: number; score_to: number }> = {
+			"5": { score_from: 0.81, score_to: 1.0 },
+			"4": { score_from: 0.61, score_to: 0.8 },
+			"3": { score_from: 0.41, score_to: 0.6 },
+			"2": { score_from: 0.21, score_to: 0.4 },
+			"1": { score_from: 0.0, score_to: 0.2 },
+		}
+		return starMap[activeFilter]
+	}, [activeFilter])
+
 	const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
 		useListComments({
 			limit: 10,
 			ref_type: "ProductSpu",
 			ref_id: productId,
+			...(scoreFilter && { score_from: scoreFilter.score_from, score_to: scoreFilter.score_to }),
 		})
 	const createComment = useCreateComment()
 
@@ -72,14 +85,9 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 	const comments = data?.pages.flatMap((page) => page.data) ?? []
 
 	// Filter comments based on active filter
+	// Star filters are handled server-side via score_from/score_to params
 	const filteredComments = comments.filter((comment) => {
 		switch (activeFilter) {
-			case "5":
-			case "4":
-			case "3":
-			case "2":
-			case "1":
-				return Math.round(comment.score * 5) === parseInt(activeFilter)
 			case "with_comment":
 				return comment.body && comment.body.trim().length > 0
 			case "with_media":

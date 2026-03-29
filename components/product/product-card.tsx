@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatPrice, formatSoldCount, cn } from "@/lib/utils"
 import { TProductCard } from "@/core/catalog/product.customer"
+import { useAddFavorite, useRemoveFavorite } from "@/core/account/favorite"
 import { toast } from "@/components/ui/sonner"
 
 interface ProductCardProps {
@@ -17,7 +18,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, className }: ProductCardProps) {
-  const [isWishlisted, setIsWishlisted] = useState(false)
+  const [isWishlisted, setIsWishlisted] = useState(product.is_favorite ?? false)
   const [isAddingToCart, setIsAddingToCart] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -44,14 +45,24 @@ export function ProductCard({ product, className }: ProductCardProps) {
     setTimeout(() => setJustAdded(false), 2000)
   }
 
-  const handleWishlist = (e: React.MouseEvent) => {
+  const addFavorite = useAddFavorite()
+  const removeFavorite = useRemoveFavorite()
+
+  const handleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsWishlisted(!isWishlisted)
-    if (!isWishlisted) {
-      toast.success("Added to wishlist")
-    } else {
-      toast.info("Removed from wishlist")
+    try {
+      if (isWishlisted) {
+        await removeFavorite.mutateAsync(product.id)
+        setIsWishlisted(false)
+        toast.info("Removed from wishlist")
+      } else {
+        await addFavorite.mutateAsync(product.id)
+        setIsWishlisted(true)
+        toast.success("Added to wishlist")
+      }
+    } catch {
+      toast.error("Failed to update wishlist")
     }
   }
 
@@ -198,7 +209,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
             {/* Sold Count - Social proof */}
             <span className="text-muted-foreground">
-              {formatSoldCount(Math.floor(Math.random() * 5000) + 100)} sold
+              {formatSoldCount(product.sold)} sold
             </span>
           </div>
 
