@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useDebounceValue } from "usehooks-ts"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -49,22 +50,22 @@ import { formatPrice } from "@/lib/utils"
 
 export default function SellerProductsPage() {
 	const [search, setSearch] = useState("")
+	const [debouncedSearch] = useDebounceValue(search, 300)
 	const [statusFilter, setStatusFilter] = useState<string>("all")
 	const [deleteProduct, setDeleteProduct] = useState<ProductSPU | null>(null)
 
 	const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
 		useListProductSPU({
 			limit: 20,
+			my_products: true,
+			...(debouncedSearch ? { search: debouncedSearch } : {}),
 			...(statusFilter !== "all"
 				? { is_active: [statusFilter === "active"] }
 				: {}),
 		})
 	const deleteMutation = useDeleteProductSPU()
 
-	const products = data?.pages.flatMap((page) => page.data) ?? []
-	const filteredProducts = products.filter((p) =>
-		p.name.toLowerCase().includes(search.toLowerCase())
-	)
+	const filteredProducts = data?.pages.flatMap((page) => page.data) ?? []
 
 	const handleDelete = async () => {
 		if (!deleteProduct) return
@@ -226,6 +227,16 @@ export default function SellerProductsPage() {
 											>
 												{product.is_active ? "Active" : "Inactive"}
 											</Badge>
+											{product.is_stale_embedding && (
+												<Badge variant="outline" className="text-xs border-amber-300 text-amber-600 bg-amber-50 dark:bg-amber-950/30">
+													Embedding queued
+												</Badge>
+											)}
+											{product.is_stale_metadata && (
+												<Badge variant="outline" className="text-xs border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-950/30">
+													Sync queued
+												</Badge>
+											)}
 										</div>
 
 										{product.tags && product.tags.length > 0 && (

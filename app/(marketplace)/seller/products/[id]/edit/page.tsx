@@ -1,34 +1,22 @@
 "use client"
 
-import { useState, useEffect, use, useRef } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import dynamic from "next/dynamic"
 import { useGetProductSPU, useUpdateProductSPU, useListProductSKU, useCreateProductSKU, useUpdateProductSKU, useDeleteProductSKU, ProductSku } from "@/core/catalog/product.vendor"
-import { useListCategories } from "@/core/catalog/category"
-import type { RichTextEditorRef } from "@/components/ui/rich-text-editor"
-import { ImageUpload, type UploadedImage } from "@/components/ui/image-upload"
-
-// Dynamic import to avoid SSR issues with Quill
-const RichTextEditor = dynamic(
-  () => import("@/components/ui/rich-text-editor").then((mod) => mod.RichTextEditor),
-  { ssr: false, loading: () => <div className="h-[200px] rounded-md border border-input bg-muted/50 animate-pulse" /> }
-)
+import { useImportStock, useGetStock, useListProductSerials, useUpdateStockSettings } from "@/core/inventory/inventory.vendor"
+import { type UploadedImage } from "@/components/ui/image-upload"
+import { ProductSPUForm, defaultFormData, type ProductSPUFormData } from "@/components/seller/product-spu-form"
+import { useDirty } from "@/lib/dirty"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -41,51 +29,59 @@ import {
   ArrowLeft,
   Save,
   Loader2,
-  ImagePlus,
   X,
   Plus,
   Package,
+  PackagePlus,
   Trash2,
   DollarSign,
   Layers,
+  Info,
+  Hash,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
+import { toast } from "@/components/ui/sonner"
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const descriptionRef = useRef<RichTextEditorRef>(null)
 
   const { data: product, isLoading: isLoadingProduct } = useGetProductSPU(id)
   const { data: skus, isLoading: isLoadingSKUs } = useListProductSKU({ spu_id: id })
-  const { data: categoriesData } = useListCategories({ limit: 100 })
 
   const updateProduct = useUpdateProductSPU()
   const createSKU = useCreateProductSKU()
   const updateSKU = useUpdateProductSKU()
   const deleteSKU = useDeleteProductSKU()
+  const importStock = useImportStock()
+  const updateStockSettings = useUpdateStockSettings()
 
-  const categories = categoriesData?.pages.flatMap((page) => page.data) ?? []
+  // Form state with dirty tracking for PATCH
+  const form = useDirty<ProductSPUFormData>({ ...defaultFormData })
+  const [images, setImages] = useState<UploadedImage[]>([])
+  const [regenerateSlug, setRegenerateSlug] = useState(false)
+  const [syncedId, setSyncedId] = useState<string | null>(null)
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    category_id: "",
-    brand_id: "",
-    is_active: true,
-    tags: [] as string[],
-  })
-
-  const [productImages, setProductImages] = useState<UploadedImage[]>([])
-  const [tagInput, setTagInput] = useState("")
-  const [specifications, setSpecifications] = useState<Array<{ name: string; value: string }>>([])
+  // SKU dialog state
   const [showSKUDialog, setShowSKUDialog] = useState(false)
   const [editingSKU, setEditingSKU] = useState<ProductSku | null>(null)
   const [deletingSKU, setDeletingSKU] = useState<ProductSku | null>(null)
+  const [stockSKU, setStockSKU] = useState<ProductSku | null>(null)
+  const [stockAmount, setStockAmount] = useState("")
+  const [serialInput, setSerialInput] = useState("")
+  const [autoGenerate, setAutoGenerate] = useState(true)
 
+  // Fetch stock details + serials when stock dialog opens
+  const { data: stockInfo } = useGetStock({
+    ref_id: stockSKU?.id ?? "",
+    ref_type: "ProductSku",
+  })
+  const { data: serialsData } = useListProductSerials({
+    stock_id: stockInfo?.id ? Number(stockInfo.id) : 0,
+    limit: 50,
+  })
   const [skuForm, setSkuForm] = useState({
     price: "",
-    stock: "",
     can_combine: true,
     attributes: [] as Array<{ name: string; value: string }>,
     weight_grams: "",
@@ -94,75 +90,59 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     height_cm: "",
   })
 
-  // Load product data when available
+  // Sync product data into form
   useEffect(() => {
     if (product) {
-      setFormData({
+      const data: ProductSPUFormData = {
         name: product.name,
         description: product.description,
         category_id: product.category?.id || "",
-        brand_id: product.brand?.id || "",
         is_active: product.is_active,
         tags: product.tags || [],
-      })
-      setSpecifications(product.specifications || [])
-      // Load existing images
-      if (product.resources) {
-        setProductImages(product.resources.map(r => ({ id: r.id, url: r.url })))
+        resource_ids: product.resources?.map(r => r.id) || [],
+        specifications: product.specifications || [],
       }
+      form.reset(data)
+      setImages(product.resources?.map(r => ({ id: r.id, url: r.url })) || [])
+      setRegenerateSlug(false)
+      setSyncedId(product.id)
     }
   }, [product])
 
-  const handleAddTag = () => {
-    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
-      setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] })
-      setTagInput("")
-    }
-  }
+  const isNameDirty = "name" in form.dirty
 
-  const handleRemoveTag = (tag: string) => {
-    setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) })
-  }
-
-  const handleAddSpec = () => {
-    setSpecifications([...specifications, { name: "", value: "" }])
-  }
-
-  const handleRemoveSpec = (index: number) => {
-    setSpecifications(specifications.filter((_, i) => i !== index))
-  }
-
-  const handleAddAttribute = () => {
-    setSkuForm({ ...skuForm, attributes: [...skuForm.attributes, { name: "", value: "" }] })
-  }
-
-  const handleRemoveAttribute = (index: number) => {
-    setSkuForm({ ...skuForm, attributes: skuForm.attributes.filter((_, i) => i !== index) })
-  }
-
+  // --- SPU submit ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    await updateProduct.mutateAsync({
-      id,
-      name: formData.name,
-      description: formData.description,
-      category_id: formData.category_id,
-      brand_id: formData.brand_id || undefined,
-      is_active: formData.is_active,
-      tags: formData.tags,
-      specifications: specifications.filter((s) => s.name && s.value),
-    })
+    if (!form.isDirty) {
+      toast.info("No changes to save")
+      return
+    }
 
-    router.push("/seller/products")
+    try {
+      await updateProduct.mutateAsync({
+        id,
+        ...form.dirty,
+        // Filter empty specs before sending
+        ...(form.dirty.specifications
+          ? { specifications: form.dirty.specifications.filter((s) => s.name && s.value) }
+          : {}),
+        ...(regenerateSlug && form.dirty.name ? { regenerate_slug: true } : {}),
+      })
+      toast.success("Product updated successfully")
+      router.push("/seller/products")
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update product")
+    }
   }
 
+  // --- SKU handlers ---
   const handleOpenSKUDialog = (sku?: ProductSku) => {
     if (sku) {
       setEditingSKU(sku)
       setSkuForm({
         price: sku.price.toString(),
-        stock: sku.stock.toString(),
         can_combine: sku.can_combine,
         attributes: sku.attributes || [],
         weight_grams: sku.package_details?.weight_grams?.toString() || "",
@@ -173,17 +153,45 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     } else {
       setEditingSKU(null)
       setSkuForm({
-        price: "",
-        stock: "",
-        can_combine: true,
-        attributes: [],
-        weight_grams: "",
-        length_cm: "",
-        width_cm: "",
-        height_cm: "",
+        price: "", can_combine: true, attributes: [],
+        weight_grams: "", length_cm: "", width_cm: "", height_cm: "",
       })
     }
     setShowSKUDialog(true)
+  }
+
+  const handleImportStock = async () => {
+    if (!stockSKU) return
+
+    const isSerial = stockInfo?.serial_required ?? false
+    let change: number
+    let serialIds: string[] = []
+
+    if (isSerial && !autoGenerate) {
+      // Custom serial IDs from textarea
+      serialIds = serialInput.split("\n").map(s => s.trim()).filter(Boolean)
+      if (serialIds.length === 0) return
+      change = serialIds.length
+    } else {
+      change = parseInt(stockAmount)
+      if (!change || change <= 0) return
+    }
+
+    try {
+      await importStock.mutateAsync({
+        ref_id: stockSKU.id,
+        ref_type: "ProductSku",
+        change,
+        serial_ids: isSerial && !autoGenerate ? serialIds : [],
+      })
+      toast.success(`Added ${change} stock${isSerial ? ` with ${change} serial IDs` : ""}`)
+      setStockSKU(null)
+      setStockAmount("")
+      setSerialInput("")
+      setAutoGenerate(true)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to import stock")
+    }
   }
 
   const handleSaveSKU = async () => {
@@ -194,35 +202,46 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       height_cm: parseFloat(skuForm.height_cm) || 0,
     }
 
-    if (editingSKU) {
-      await updateSKU.mutateAsync({
-        id: editingSKU.id,
-        price: parseFloat(skuForm.price),
-        can_combine: skuForm.can_combine,
-        attributes: skuForm.attributes.filter((a) => a.name && a.value),
-        package_details: packageDetails,
-      })
-    } else {
-      await createSKU.mutateAsync({
-        spu_id: id,
-        price: parseFloat(skuForm.price),
-        can_combine: skuForm.can_combine,
-        attributes: skuForm.attributes.filter((a) => a.name && a.value),
-        package_details: packageDetails,
-      })
+    try {
+      if (editingSKU) {
+        await updateSKU.mutateAsync({
+          id: editingSKU.id,
+          price: parseFloat(skuForm.price),
+          can_combine: skuForm.can_combine,
+          attributes: skuForm.attributes.filter((a) => a.name && a.value),
+          package_details: packageDetails,
+        })
+        toast.success("Variant updated")
+      } else {
+        await createSKU.mutateAsync({
+          spu_id: id,
+          price: parseFloat(skuForm.price),
+          can_combine: skuForm.can_combine,
+          attributes: skuForm.attributes.filter((a) => a.name && a.value),
+          package_details: packageDetails,
+        })
+        toast.success("Variant created")
+      }
+      setShowSKUDialog(false)
+      setEditingSKU(null)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save variant")
     }
-
-    setShowSKUDialog(false)
-    setEditingSKU(null)
   }
 
   const handleDeleteSKU = async () => {
     if (!deletingSKU) return
-    await deleteSKU.mutateAsync({ id: deletingSKU.id })
-    setDeletingSKU(null)
+    try {
+      await deleteSKU.mutateAsync({ id: deletingSKU.id })
+      toast.success("Variant deleted")
+      setDeletingSKU(null)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete variant")
+    }
   }
 
-  if (isLoadingProduct) {
+  // --- Loading / Error states ---
+  if (isLoadingProduct || (product && syncedId !== product.id)) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -273,99 +292,28 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
-            <CardDescription>Update the basic details of your product</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Product Name *</Label>
-              <Input
-                id="name"
-                placeholder="Enter product name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description *</Label>
-              <RichTextEditor
-                ref={descriptionRef}
-                defaultValue={formData.description}
-                onChange={(html) => setFormData({ ...formData, description: html })}
-                placeholder="Describe your product in detail. Include features, benefits, materials, dimensions, and any other relevant information..."
-                toolbarOptions="full"
-                className="[&_.ql-editor]:min-h-[200px]"
-              />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="category">Category *</Label>
-                <Select
-                  value={formData.category_id}
-                  onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-                >
-                  <SelectTrigger id="category">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="brand">Brand</Label>
-                <Input
-                  id="brand"
-                  placeholder="Enter brand name"
-                  value={formData.brand_id}
-                  onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="font-medium">Active</p>
-                <p className="text-sm text-muted-foreground">
-                  Make this product visible to customers
-                </p>
-              </div>
+        <ProductSPUForm
+          formKey={syncedId ?? id}
+          data={form.data}
+          onChange={form.set}
+          images={images}
+          onImagesChange={setImages}
+          afterName={isNameDirty ? (
+            <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
               <Switch
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                id="regenerate-slug"
+                checked={regenerateSlug}
+                onCheckedChange={setRegenerateSlug}
               />
+              <Label htmlFor="regenerate-slug" className="cursor-pointer font-normal">
+                Regenerate URL slug from new name
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Old product links will stop working if enabled
+                </span>
+              </Label>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Images */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Product Images</CardTitle>
-            <CardDescription>
-              Upload and manage product images. The first image will be the main product image.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ImageUpload
-              value={productImages}
-              onChange={setProductImages}
-              maxFiles={10}
-              maxSizeInMB={5}
-            />
-          </CardContent>
-        </Card>
+          ) : undefined}
+        />
 
         {/* SKUs / Variants */}
         <Card>
@@ -394,17 +342,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             ) : skus && skus.length > 0 ? (
               <div className="space-y-3">
                 {skus.map((sku) => (
-                  <div
-                    key={sku.id}
-                    className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
-                  >
+                  <div key={sku.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{formatPrice(sku.price)}</span>
                         <Badge variant="outline">Stock: {sku.stock}</Badge>
-                        {sku.can_combine && (
-                          <Badge variant="secondary">Combinable</Badge>
-                        )}
+                        {sku.can_combine && <Badge variant="secondary">Combinable</Badge>}
                       </div>
                       {sku.attributes && sku.attributes.length > 0 && (
                         <div className="flex gap-2 flex-wrap">
@@ -417,21 +360,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenSKUDialog(sku)}
-                      >
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { setStockSKU(sku); setStockAmount("") }}>
+                        <PackagePlus className="h-4 w-4 mr-1" />
+                        Stock
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => handleOpenSKUDialog(sku)}>
                         Edit
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => setDeletingSKU(sku)}
-                      >
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeletingSKU(sku)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -447,103 +383,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </CardContent>
         </Card>
 
-        {/* Tags */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Tags</CardTitle>
-            <CardDescription>Add tags to help customers find your product</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add a tag..."
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    handleAddTag()
-                  }
-                }}
-              />
-              <Button type="button" variant="outline" onClick={handleAddTag}>
-                Add
-              </Button>
-            </div>
-
-            {formData.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {formData.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1">
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="ml-1 hover:text-destructive"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Specifications */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Specifications</CardTitle>
-            <CardDescription>Add product specifications</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {specifications.map((spec, index) => (
-              <div key={index} className="flex gap-2">
-                <Input
-                  placeholder="Name (e.g., Material)"
-                  value={spec.name}
-                  onChange={(e) => {
-                    const updated = [...specifications]
-                    updated[index].name = e.target.value
-                    setSpecifications(updated)
-                  }}
-                />
-                <Input
-                  placeholder="Value (e.g., Cotton)"
-                  value={spec.value}
-                  onChange={(e) => {
-                    const updated = [...specifications]
-                    updated[index].value = e.target.value
-                    setSpecifications(updated)
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleRemoveSpec(index)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-
-            <Button type="button" variant="outline" onClick={handleAddSpec}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Specification
-            </Button>
-          </CardContent>
-        </Card>
-
         {/* Actions */}
         <div className="flex items-center justify-end gap-4">
           <Button type="button" variant="outline" asChild>
             <Link href="/seller/products">Cancel</Link>
           </Button>
-          <Button
-            type="submit"
-            disabled={updateProduct.isPending || !formData.name || !formData.category_id}
-          >
+          <Button type="submit" disabled={updateProduct.isPending || !form.data.name}>
             {updateProduct.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -570,30 +415,18 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </DialogHeader>
 
           <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="sku-price">Price *</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="sku-price"
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="pl-10"
-                    value={skuForm.price}
-                    onChange={(e) => setSkuForm({ ...skuForm, price: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sku-stock">Stock</Label>
+            <div className="space-y-2">
+              <Label htmlFor="sku-price">Price *</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="sku-stock"
+                  id="sku-price"
                   type="number"
-                  placeholder="0"
-                  value={skuForm.stock}
-                  onChange={(e) => setSkuForm({ ...skuForm, stock: e.target.value })}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="pl-10"
+                  value={skuForm.price}
+                  onChange={(e) => setSkuForm({ ...skuForm, price: e.target.value })}
                 />
               </div>
             </div>
@@ -620,7 +453,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     value={attr.name}
                     onChange={(e) => {
                       const updated = [...skuForm.attributes]
-                      updated[index].name = e.target.value
+                      updated[index] = { ...updated[index], name: e.target.value }
                       setSkuForm({ ...skuForm, attributes: updated })
                     }}
                   />
@@ -629,7 +462,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     value={attr.value}
                     onChange={(e) => {
                       const updated = [...skuForm.attributes]
-                      updated[index].value = e.target.value
+                      updated[index] = { ...updated[index], value: e.target.value }
                       setSkuForm({ ...skuForm, attributes: updated })
                     }}
                   />
@@ -637,13 +470,18 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleRemoveAttribute(index)}
+                    onClick={() => setSkuForm({ ...skuForm, attributes: skuForm.attributes.filter((_, i) => i !== index) })}
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={handleAddAttribute}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setSkuForm({ ...skuForm, attributes: [...skuForm.attributes, { name: "", value: "" }] })}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Attribute
               </Button>
@@ -654,66 +492,35 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             <div className="space-y-3">
               <Label>Package Details</Label>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="weight" className="text-xs text-muted-foreground">Weight (grams)</Label>
-                  <Input
-                    id="weight"
-                    type="number"
-                    placeholder="0"
-                    value={skuForm.weight_grams}
-                    onChange={(e) => setSkuForm({ ...skuForm, weight_grams: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="length" className="text-xs text-muted-foreground">Length (cm)</Label>
-                  <Input
-                    id="length"
-                    type="number"
-                    placeholder="0"
-                    value={skuForm.length_cm}
-                    onChange={(e) => setSkuForm({ ...skuForm, length_cm: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="width" className="text-xs text-muted-foreground">Width (cm)</Label>
-                  <Input
-                    id="width"
-                    type="number"
-                    placeholder="0"
-                    value={skuForm.width_cm}
-                    onChange={(e) => setSkuForm({ ...skuForm, width_cm: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="height" className="text-xs text-muted-foreground">Height (cm)</Label>
-                  <Input
-                    id="height"
-                    type="number"
-                    placeholder="0"
-                    value={skuForm.height_cm}
-                    onChange={(e) => setSkuForm({ ...skuForm, height_cm: e.target.value })}
-                  />
-                </div>
+                {([
+                  ["weight_grams", "Weight (grams)"],
+                  ["length_cm", "Length (cm)"],
+                  ["width_cm", "Width (cm)"],
+                  ["height_cm", "Height (cm)"],
+                ] as const).map(([key, label]) => (
+                  <div key={key} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">{label}</Label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={skuForm[key]}
+                      onChange={(e) => setSkuForm({ ...skuForm, [key]: e.target.value })}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSKUDialog(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowSKUDialog(false)}>Cancel</Button>
             <Button
               onClick={handleSaveSKU}
               disabled={createSKU.isPending || updateSKU.isPending || !skuForm.price}
             >
               {(createSKU.isPending || updateSKU.isPending) ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Variant"
-              )}
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+              ) : "Save Variant"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -724,26 +531,194 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Variant</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this variant? This action cannot be undone.
-            </DialogDescription>
+            <DialogDescription>Are you sure? This action cannot be undone.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingSKU(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteSKU}
-              disabled={deleteSKU.isPending}
-            >
+            <Button variant="outline" onClick={() => setDeletingSKU(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteSKU} disabled={deleteSKU.isPending}>
               {deleteSKU.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting...</>
+              ) : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Stock Dialog */}
+      <Dialog open={!!stockSKU} onOpenChange={() => setStockSKU(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Manage Stock</DialogTitle>
+            <DialogDescription>
+              {stockSKU?.attributes && stockSKU.attributes.length > 0
+                ? stockSKU.attributes.map(a => a.value).join(" / ")
+                : formatPrice(stockSKU?.price ?? 0)}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+            {/* Current stock summary */}
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-lg font-bold">{stockInfo?.stock ?? stockSKU?.stock ?? 0}</p>
+                <p className="text-xs text-muted-foreground">Available</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-lg font-bold">{stockInfo?.taken ?? 0}</p>
+                <p className="text-xs text-muted-foreground">Sold</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3 flex flex-col items-center gap-1">
+                <Switch
+                  checked={stockInfo?.serial_required ?? false}
+                  disabled={updateStockSettings.isPending}
+                  onCheckedChange={async (checked) => {
+                    if (!stockSKU) return
+                    try {
+                      await updateStockSettings.mutateAsync({
+                        ref_id: stockSKU.id,
+                        ref_type: "ProductSku",
+                        serial_required: checked,
+                      })
+                      toast.success(checked ? "Serial tracking enabled" : "Serial tracking disabled")
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to update")
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">Serial Tracking</p>
+              </div>
+            </div>
+
+            {/* Existing serials list */}
+            {stockInfo?.serial_required && serialsData?.pages && (
+              <>
+                <Separator />
+                <div>
+                  <Label className="text-sm font-medium flex items-center gap-1.5 mb-2">
+                    <Hash className="h-3.5 w-3.5" />
+                    Existing Serial IDs
+                  </Label>
+                  {(() => {
+                    const serials = serialsData.pages.flatMap(p => p.data) ?? []
+                    return serials.length > 0 ? (
+                      <div className="border rounded-lg max-h-32 overflow-y-auto">
+                        {serials.map((serial) => (
+                          <div key={serial.id} className="flex items-center justify-between px-3 py-1.5 text-xs border-b last:border-0">
+                            <code className="font-mono">{serial.id}</code>
+                            <Badge variant={
+                              serial.status === "Active" ? "default" :
+                              serial.status === "Taken" ? "secondary" :
+                              "outline"
+                            } className="text-[10px] h-5">
+                              {serial.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No serial IDs yet</p>
+                    )
+                  })()}
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            {/* Add stock section */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Add Stock</Label>
+
+              {stockInfo?.serial_required ? (
+                <div className="space-y-3">
+                  {/* Serial mode toggle */}
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <p className="text-sm font-medium">Auto-generate serial IDs</p>
+                      <p className="text-xs text-muted-foreground">Generate UUID-based IDs automatically</p>
+                    </div>
+                    <Switch checked={autoGenerate} onCheckedChange={setAutoGenerate} />
+                  </div>
+
+                  {autoGenerate ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="stock-amount">Quantity *</Label>
+                      <Input
+                        id="stock-amount"
+                        type="number"
+                        min="1"
+                        placeholder="Number of items to add..."
+                        value={stockAmount}
+                        onChange={(e) => setStockAmount(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Each item will get a unique auto-generated serial ID.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="serial-input">Serial IDs (one per line) *</Label>
+                      <Textarea
+                        id="serial-input"
+                        placeholder={"SN-001\nSN-002\nSN-003"}
+                        value={serialInput}
+                        onChange={(e) => setSerialInput(e.target.value)}
+                        className="font-mono text-xs min-h-[100px]"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {serialInput.split("\n").filter(s => s.trim()).length} serial IDs entered.
+                        Stock will increase by this count.
+                      </p>
+                    </div>
+                  )}
+                </div>
               ) : (
-                "Delete"
+                <div className="space-y-2">
+                  <Label htmlFor="stock-amount">Quantity *</Label>
+                  <Input
+                    id="stock-amount"
+                    type="number"
+                    min="1"
+                    placeholder="Number of items to add..."
+                    value={stockAmount}
+                    onChange={(e) => setStockAmount(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Info note */}
+            <div className="flex gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-800 dark:text-blue-200">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                {stockInfo?.serial_required ? (
+                  <p>
+                    <strong>Serial tracking is enabled.</strong> During checkout, each purchased item will be assigned a specific serial ID from your inventory. Customers can see their serial IDs in their order details.
+                  </p>
+                ) : (
+                  <p>
+                    <strong>No serial tracking.</strong> Stock is tracked by quantity only. During checkout, the available count decreases but no specific serial ID is assigned to the buyer.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStockSKU(null)}>Cancel</Button>
+            <Button
+              onClick={handleImportStock}
+              disabled={
+                importStock.isPending ||
+                (stockInfo?.serial_required && !autoGenerate
+                  ? serialInput.split("\n").filter(s => s.trim()).length === 0
+                  : !stockAmount || parseInt(stockAmount) <= 0)
+              }
+            >
+              {importStock.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Adding...</>
+              ) : (
+                <><PackagePlus className="h-4 w-4 mr-2" />Add Stock</>
               )}
             </Button>
           </DialogFooter>
