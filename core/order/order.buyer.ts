@@ -16,6 +16,7 @@ export type TOrderItem = {
   address: string
   status: OrderItemStatus
   sku_id: string
+  spu_id: string
   sku_name: string
   quantity: number
   unit_price: number
@@ -59,7 +60,7 @@ export type TOrder = {
 
 // ===== Hooks =====
 
-export const useCheckout = () => {
+export const useBuyerCheckout = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationKey: ['checkout'],
@@ -73,41 +74,41 @@ export const useCheckout = () => {
       }>
     }) => customFetchStandard<{
       items: TOrderItem[]
-    }>(`order/checkout`, {
+    }>(`order/buyer/checkout`, {
       method: 'POST',
       body: JSON.stringify(params),
     }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['account', 'cart'] })
-      await qc.invalidateQueries({ queryKey: ['order', 'checkout', 'items'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'buyer', 'pending'] })
     },
   })
 }
 
-export const useListPendingItems = (params: PaginationParams<{
+export const useListBuyerPending = (params: PaginationParams<{
   status?: string[]
 }>) =>
   useInfiniteQueryPagination<TOrderItem>(
-    ['order', 'checkout', 'items'],
-    'order/checkout/items',
+    ['order', 'buyer', 'pending'],
+    'order/buyer/pending',
     params
   )
 
-export const useCancelPendingItem = () => {
+export const useCancelBuyerPending = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationKey: ['order', 'checkout', 'items', 'cancel'],
+    mutationKey: ['order', 'buyer', 'pending', 'cancel'],
     mutationFn: (id: number) =>
-      customFetchStandard<void>(`order/checkout/items/${id}`, {
+      customFetchStandard<void>(`order/buyer/pending/${id}`, {
         method: 'DELETE',
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'checkout', 'items'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'buyer', 'pending'] })
     },
   })
 }
 
-export const usePayOrders = () => {
+export const usePayBuyerOrders = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationKey: ['order', 'pay'],
@@ -117,26 +118,26 @@ export const usePayOrders = () => {
     }) => customFetchStandard<{
       payment: TPayment
       redirect_url?: string
-    }>(`order/pay`, {
+    }>(`order/buyer/pay`, {
       method: 'POST',
       body: JSON.stringify(params),
     }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'buyer', 'confirmed'] })
     },
   })
 }
 
-export const useGetOrder = (id: string) =>
+export const useGetBuyerOrder = (id: string) =>
   useQuery({
     queryKey: ['order', id],
-    queryFn: () => customFetchStandard<TOrder>(`order/${id}`),
+    queryFn: () => customFetchStandard<TOrder>(`order/buyer/confirmed/${id}`),
     enabled: !!id,
   })
 
-export const useListOrders = (params: PaginationParams<unknown>) =>
+export const useListBuyerConfirmed = (params: PaginationParams<unknown>) =>
   useInfiniteQueryPagination<TOrder>(
-    ['order', 'list'],
-    'order',
+    ['order', 'buyer', 'confirmed'],
+    'order/buyer/confirmed',
     params
   )

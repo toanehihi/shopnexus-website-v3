@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { customFetchStandard } from "@/lib/queryclient/custom-fetch"
 import { useInfiniteQueryPagination } from "@/lib/queryclient/use-infinite-query"
 import { PaginationParams } from "@/lib/queryclient/response.type"
@@ -6,59 +6,66 @@ import { TOrder, TOrderItem } from "./order.buyer"
 
 // ===== Hooks =====
 
-export const useListIncomingItems = (params: PaginationParams<{
+export const useListSellerPending = (params: PaginationParams<{
   search?: string
 }>) =>
   useInfiniteQueryPagination<TOrderItem>(
-    ['order', 'incoming'],
-    'order/incoming',
+    ['order', 'seller', 'pending'],
+    'order/seller/pending',
     params
   )
 
-export const useConfirmItems = () => {
+export const useConfirmSellerPending = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationKey: ['order', 'incoming', 'confirm'],
+    mutationKey: ['order', 'seller', 'pending', 'confirm'],
     mutationFn: (params: {
       item_ids: number[]
       transport_option: string
       note?: string
     }) =>
-      customFetchStandard<TOrder>(`order/incoming/confirm`, {
+      customFetchStandard<TOrder>(`order/seller/pending/confirm`, {
         method: 'POST',
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'incoming'] })
-      await qc.invalidateQueries({ queryKey: ['order', 'seller'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'pending'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'confirmed'] })
     },
   })
 }
 
-export const useRejectItems = () => {
+export const useRejectSellerPending = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationKey: ['order', 'incoming', 'reject'],
+    mutationKey: ['order', 'seller', 'pending', 'reject'],
     mutationFn: (params: {
       item_ids: number[]
     }) =>
-      customFetchStandard<void>(`order/incoming/reject`, {
+      customFetchStandard<void>(`order/seller/pending/reject`, {
         method: 'POST',
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'incoming'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'pending'] })
     },
   })
 }
 
-export const useListSellerOrders = (params: PaginationParams<{
+export const useListSellerConfirmed = (params: PaginationParams<{
   search?: string
   payment_status?: string[]
   order_status?: string[]
 }>) =>
   useInfiniteQueryPagination<TOrder>(
-    ['order', 'seller'],
-    'order/seller',
+    ['order', 'seller', 'confirmed'],
+    'order/seller/confirmed',
     params
   )
+
+export const useGetSellerOrder = (id: string) =>
+  useQuery({
+    queryKey: ['order', 'seller', 'confirmed', id],
+    queryFn: () => customFetchStandard<TOrder>(`order/seller/confirmed/${id}`),
+    enabled: !!id,
+  })

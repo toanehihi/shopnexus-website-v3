@@ -38,7 +38,7 @@ export const useCreateRefund = () => {
       address: string | null
       resource_ids: string[]
     }) =>
-      customFetchStandard<TRefund>(`order/refund`, {
+      customFetchStandard<TRefund>(`order/buyer/refund`, {
         method: 'POST',
         body: JSON.stringify(params),
       }),
@@ -53,7 +53,7 @@ export const useListRefunds = (params: PaginationParams<{
 }>) =>
   useInfiniteQueryPagination<TRefund>(
     ['order', 'refund', 'list'],
-    'order/refund',
+    'order/buyer/refund',
     params
   )
 
@@ -67,7 +67,7 @@ export const useUpdateRefund = () => {
       reason?: string | null
       resource_ids: string[]
     }) =>
-      customFetchStandard<TRefund>(`order/refund`, {
+      customFetchStandard<TRefund>(`order/buyer/refund`, {
         method: 'PATCH',
         body: JSON.stringify(params),
       }),
@@ -81,22 +81,8 @@ export const useCancelRefund = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { id: string }) =>
-      customFetchStandard<void>(`order/refund`, {
+      customFetchStandard<void>(`order/buyer/refund`, {
         method: 'DELETE',
-        body: JSON.stringify(params),
-      }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'refund'] })
-    },
-  })
-}
-
-export const useConfirmRefund = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (params: { id: string }) =>
-      customFetchStandard<TRefund>(`order/refund/confirm`, {
-        method: 'POST',
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
