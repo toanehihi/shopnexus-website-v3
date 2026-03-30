@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from "react"
 import { useDebounceValue } from "usehooks-ts"
+import Link from "next/link"
 import Image from "next/image"
 import {
-	useListIncomingItems,
-	useConfirmItems,
-	useRejectItems,
+	useListSellerPending,
+	useConfirmSellerPending,
+	useRejectSellerPending,
 } from "@/core/order/order.seller"
 import { TOrderItem } from "@/core/order/order.buyer"
 import { useListServiceOption } from "@/core/common/option"
@@ -38,6 +39,12 @@ import {
 } from "lucide-react"
 import { formatPrice, cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useGetAccount } from "@/core/account/account"
+
+function AccountName({ id, fallback = "User" }: { id: string; fallback?: string }) {
+	const { data } = useGetAccount(id)
+	return <>{data?.name || data?.username || fallback}</>
+}
 
 export default function SellerIncomingPage() {
 	const [search, setSearch] = useState("")
@@ -49,15 +56,15 @@ export default function SellerIncomingPage() {
 	const [confirmNote, setConfirmNote] = useState("")
 
 	const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-		useListIncomingItems({
+		useListSellerPending({
 			limit: 20,
 			...(debouncedSearch ? { search: debouncedSearch } : {}),
 		})
 	const { data: transportOptions } = useListServiceOption({
 		category: "transport",
 	})
-	const confirmMutation = useConfirmItems()
-	const rejectMutation = useRejectItems()
+	const confirmMutation = useConfirmSellerPending()
+	const rejectMutation = useRejectSellerPending()
 
 	const items = useMemo(
 		() => data?.pages.flatMap((page) => page.data) ?? [],
@@ -216,7 +223,7 @@ export default function SellerIncomingPage() {
 									{/* Group Header */}
 									<div className="flex items-center gap-2 mb-4 pb-3 border-b">
 										<Badge variant="outline">
-											Buyer #{buyerId.slice(0, 8)}
+											<AccountName id={buyerId} fallback="Buyer" />
 										</Badge>
 										<div className="flex items-center gap-1 text-sm text-muted-foreground">
 											<MapPin className="h-3 w-3" />
@@ -248,11 +255,11 @@ export default function SellerIncomingPage() {
 													)}
 												</div>
 												<div className="flex-1 min-w-0">
-													<p className="font-medium truncate">
+													<Link href={`/product/${item.spu_id}`} className="font-medium truncate text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
 														{item.sku_name}
-													</p>
+													</Link>
 													<p className="text-sm text-muted-foreground">
-														SKU: {item.sku_id.slice(0, 8)}
+														SKU: {item.sku_name}
 													</p>
 													<div className="flex items-center gap-4 mt-1 text-sm">
 														<span>Qty: {item.quantity}</span>

@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useGetCart } from "@/core/order/cart"
-import { useCheckout } from "@/core/order/order.buyer"
+import { useBuyerCheckout } from "@/core/order/order.buyer"
 import { useListContacts, AddressType, type Contact } from "@/core/account/contact"
 import { useGetMe } from "@/core/account/account"
 import { formatPrice } from "@/lib/utils"
@@ -32,7 +32,7 @@ export default function CheckoutPage() {
   const { data: contacts, isLoading: contactsLoading } = useListContacts()
   const { data: user } = useGetMe()
 
-  const checkoutMutation = useCheckout()
+  const checkoutMutation = useBuyerCheckout()
 
   const [selectedContactId, setSelectedContactId] = useState<string>("")
 

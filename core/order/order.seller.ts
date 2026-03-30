@@ -69,3 +69,13 @@ export const useGetSellerOrder = (id: string) =>
     queryFn: () => customFetchStandard<TOrder>(`order/seller/confirmed/${id}`),
     enabled: !!id,
   })
+
+export const useGetSellerOverview = (params?: { search?: string }) => {
+  const pending = useListSellerPending({ limit: 20, ...params })
+  const confirmed = useListSellerConfirmed({ limit: 20, ...params })
+  return {
+    incomingItems: pending.data?.pages.flatMap(p => p.data) ?? [],
+    orders: confirmed.data?.pages.flatMap(p => p.data) ?? [],
+    isLoading: pending.isLoading || confirmed.isLoading,
+  }
+}

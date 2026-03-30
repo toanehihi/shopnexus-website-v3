@@ -141,3 +141,13 @@ export const useListBuyerConfirmed = (params: PaginationParams<unknown>) =>
     'order/buyer/confirmed',
     params
   )
+
+export const useGetBuyerOverview = () => {
+  const pending = useListBuyerPending({ limit: 20 })
+  const confirmed = useListBuyerConfirmed({ limit: 20 })
+  return {
+    pendingItems: pending.data?.pages.flatMap(p => p.data) ?? [],
+    orders: confirmed.data?.pages.flatMap(p => p.data) ?? [],
+    isLoading: pending.isLoading || confirmed.isLoading,
+  }
+}

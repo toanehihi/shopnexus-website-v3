@@ -4,7 +4,7 @@ import { useState, useMemo } from "react"
 import { useDebounceValue } from "usehooks-ts"
 import Link from "next/link"
 import Image from "next/image"
-import { useListSellerOrders } from "@/core/order/order.seller"
+import { useListSellerConfirmed } from "@/core/order/order.seller"
 import { TOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -31,6 +31,19 @@ import {
   Clock,
 } from "lucide-react"
 import { formatPrice, cn } from "@/lib/utils"
+import { useGetAccount } from "@/core/account/account"
+
+function summarizeOrder(items?: Array<{ sku_name: string }>): string {
+  if (!items?.length) return "Order"
+  if (items.length === 1) return items[0].sku_name
+  if (items.length === 2) return `${items[0].sku_name}, ${items[1].sku_name}`
+  return `${items[0].sku_name} and ${items.length - 1} more`
+}
+
+function AccountName({ id, fallback = "User" }: { id: string; fallback?: string }) {
+  const { data } = useGetAccount(id)
+  return <>{data?.name || data?.username || fallback}</>
+}
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
   Pending: { label: "Pending", variant: "secondary", icon: Clock },
@@ -45,7 +58,7 @@ export default function SellerOrdersPage() {
   const [debouncedSearch] = useDebounceValue(search, 300)
   const [activeTab, setActiveTab] = useState("all")
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListSellerOrders({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListSellerConfirmed({
     limit: 20,
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(activeTab !== "all" ? { order_status: [activeTab] } : {}),
@@ -135,7 +148,7 @@ export default function SellerOrdersPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-medium">Order #{order.id.slice(0, 8)}</h3>
+                        <h3 className="font-medium">{summarizeOrder(order.items)}</h3>
                         <Badge variant={status.variant} className="gap-1">
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
@@ -147,10 +160,10 @@ export default function SellerOrdersPage() {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(order.date_created)}
+                        #{order.id.slice(0, 8)} &middot; {formatDate(order.date_created)}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Buyer #{order.buyer_id.slice(0, 8)}
+                        Buyer: <AccountName id={order.buyer_id} fallback="Buyer" />
                       </p>
                       <p className="text-sm">
                         {order.items.length} item{order.items.length !== 1 ? "s" : ""} |

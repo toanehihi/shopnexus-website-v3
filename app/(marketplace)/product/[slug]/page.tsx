@@ -13,7 +13,7 @@ import { useGetAccount } from "@/core/account/account"
 import { useAddFavorite, useRemoveFavorite } from "@/core/account/favorite"
 import { useListContacts } from "@/core/account/contact"
 import { useUpdateCart } from "@/core/order/cart"
-import { useCheckout } from "@/core/order/order.buyer"
+import { useBuyerCheckout } from "@/core/order/order.buyer"
 import { formatPrice, formatSoldCount } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -67,19 +67,22 @@ export default function ProductDetailPage({
 }) {
 	const { slug } = use(params)
 	const { data: product, isLoading, error } = useGetProductDetail({ slug })
-	const { data: vendor, isLoading: isLoadingVendor } = useGetAccount(product?.vendor_id ?? "")
+	const { data: vendor, isLoading: isLoadingVendor } = useGetAccount(
+		product?.vendor_id ?? "",
+	)
 	const { data: vendorStats } = useGetVendorStats(product?.vendor_id ?? "")
 	const { data: recommendedProducts, isLoading: isLoadingRecommended } =
 		useListProductCardsRecommended({ limit: 4 })
 	const updateCart = useUpdateCart()
-	const checkout = useCheckout()
+	const checkout = useBuyerCheckout()
 	const router = useRouter()
 	const { openChat } = useChatContext()
 	const addFavorite = useAddFavorite()
 	const removeFavorite = useRemoveFavorite()
 	const { data: contacts } = useListContacts()
 
-	const [selectedAttributes, setSelectedAttributes] = useState<SelectedAttributes>({})
+	const [selectedAttributes, setSelectedAttributes] =
+		useState<SelectedAttributes>({})
 	const [quantity, setQuantity] = useState(1)
 	const [selectedImageIndex, setSelectedImageIndex] = useState(0)
 	const [isAddingToCart, setIsAddingToCart] = useState(false)
@@ -113,7 +116,10 @@ export default function ProductDetailPage({
 	}, [product?.skus])
 
 	// Get attribute names in order
-	const attributeNames = useMemo(() => Object.keys(attributeOptions), [attributeOptions])
+	const attributeNames = useMemo(
+		() => Object.keys(attributeOptions),
+		[attributeOptions],
+	)
 
 	// Initialize selected attributes when product loads
 	useEffect(() => {
@@ -141,12 +147,14 @@ export default function ProductDetailPage({
 			return product?.skus?.[0] || null
 		}
 
-		return product.skus.find((sku) => {
-			if (!sku.attributes) return false
-			return sku.attributes.every(
-				(attr) => selectedAttributes[attr.name] === attr.value
-			)
-		}) || null
+		return (
+			product.skus.find((sku) => {
+				if (!sku.attributes) return false
+				return sku.attributes.every(
+					(attr) => selectedAttributes[attr.name] === attr.value,
+				)
+			}) || null
+		)
 	}, [product?.skus, selectedAttributes])
 
 	// Check which values are available for each attribute given current selections
@@ -159,11 +167,13 @@ export default function ProductDetailPage({
 			if (!sku.attributes) return
 
 			// Check if this SKU matches all OTHER selected attributes
-			const matchesOthers = Object.entries(selectedAttributes).every(([name, value]) => {
-				if (name === attributeName) return true // Skip the current attribute
-				const skuAttr = sku.attributes?.find((a) => a.name === name)
-				return skuAttr?.value === value
-			})
+			const matchesOthers = Object.entries(selectedAttributes).every(
+				([name, value]) => {
+					if (name === attributeName) return true // Skip the current attribute
+					const skuAttr = sku.attributes?.find((a) => a.name === name)
+					return skuAttr?.value === value
+				},
+			)
 
 			if (matchesOthers) {
 				const attr = sku.attributes.find((a) => a.name === attributeName)
@@ -184,13 +194,14 @@ export default function ProductDetailPage({
 	}
 
 	// Computed product stats
-	const totalSold = useMemo(() =>
-		product?.skus?.reduce((sum, sku) => sum + (sku.taken || 0), 0) ?? 0
-	, [product?.skus])
+	const totalSold = useMemo(
+		() => product?.skus?.reduce((sum, sku) => sum + (sku.taken || 0), 0) ?? 0,
+		[product?.skus],
+	)
 
 	const priceRange = useMemo(() => {
 		if (!product?.skus || product.skus.length <= 1) return null
-		const prices = product.skus.map(s => s.price)
+		const prices = product.skus.map((s) => s.price)
 		const min = Math.min(...prices)
 		const max = Math.max(...prices)
 		return min < max ? { min, max } : null
@@ -200,7 +211,8 @@ export default function ProductDetailPage({
 		if (!selectedSku) return null
 		const stock = selectedSku.stock ?? 0
 		if (stock <= 0) return { label: "Out of Stock", color: "text-destructive" }
-		if (stock <= 5) return { label: `Only ${stock} left`, color: "text-amber-600" }
+		if (stock <= 5)
+			return { label: `Only ${stock} left`, color: "text-amber-600" }
 		return { label: "In Stock", color: "text-green-600" }
 	}, [selectedSku])
 
@@ -209,7 +221,9 @@ export default function ProductDetailPage({
 		if (navigator.share) {
 			try {
 				await navigator.share({ title: product?.name, url })
-			} catch { /* user cancelled */ }
+			} catch {
+				/* user cancelled */
+			}
 		} else {
 			await navigator.clipboard.writeText(url)
 			toast.success("Link copied to clipboard")
@@ -221,8 +235,8 @@ export default function ProductDetailPage({
 			? Math.round(
 					((selectedSku.original_price - selectedSku.price) /
 						selectedSku.original_price) *
-						100
-			  )
+						100,
+				)
 			: 0
 
 	const handleAddToCart = async () => {
@@ -269,7 +283,8 @@ export default function ProductDetailPage({
 
 	const handleConfirmBuyNow = async () => {
 		if (!selectedSku) return
-		const defaultContact = contacts?.find((c: any) => c.is_default) || contacts?.[0]
+		const defaultContact =
+			contacts?.find((c: any) => c.is_default) || contacts?.[0]
 		if (!defaultContact) {
 			setIsBuyNowOpen(false)
 			toast.error("Please add a shipping address first")
@@ -280,11 +295,13 @@ export default function ProductDetailPage({
 		try {
 			await checkout.mutateAsync({
 				buy_now: true,
-				items: [{
-					sku_id: selectedSku.id,
-					quantity,
-					address: defaultContact.address,
-				}],
+				items: [
+					{
+						sku_id: selectedSku.id,
+						quantity,
+						address: defaultContact.address,
+					},
+				],
 			})
 			setIsBuyNowOpen(false)
 			toast.success("Order placed successfully!", {
@@ -305,7 +322,9 @@ export default function ProductDetailPage({
 	if (error || !product) {
 		return (
 			<div className="container mx-auto px-4 py-8 sm:py-12 text-center">
-				<h1 className="text-xl sm:text-2xl font-bold mb-4">Product not found</h1>
+				<h1 className="text-xl sm:text-2xl font-bold mb-4">
+					Product not found
+				</h1>
 				<p className="text-muted-foreground mb-6 text-sm sm:text-base">
 					The product you&apos;re looking for doesn&apos;t exist or has been
 					removed.
@@ -317,7 +336,8 @@ export default function ProductDetailPage({
 		)
 	}
 
-	const hasMultipleVariants = product.skus && product.skus.length > 1 && attributeNames.length > 0
+	const hasMultipleVariants =
+		product.skus && product.skus.length > 1 && attributeNames.length > 0
 
 	return (
 		<div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
@@ -338,16 +358,23 @@ export default function ProductDetailPage({
 						<ChevronRight className="h-4 w-4 flex-shrink-0" />
 					</>
 				)}
-				<span className="text-foreground truncate max-w-[200px]">{product.name}</span>
+				<span className="text-foreground truncate max-w-[200px]">
+					{product.name}
+				</span>
 			</nav>
 
 			{/* Mobile Breadcrumb */}
 			<div className="sm:hidden mb-4 flex items-center gap-1.5 text-xs text-muted-foreground overflow-x-auto">
-				<Link href="/" className="hover:text-primary shrink-0">Home</Link>
+				<Link href="/" className="hover:text-primary shrink-0">
+					Home
+				</Link>
 				{product.category && (
 					<>
 						<ChevronRight className="h-3 w-3 shrink-0" />
-						<Link href={`/categories/${product.category.id}`} className="hover:text-primary shrink-0">
+						<Link
+							href={`/categories/${product.category.id}`}
+							className="hover:text-primary shrink-0"
+						>
 							{product.category.name}
 						</Link>
 					</>
@@ -391,7 +418,7 @@ export default function ProductDetailPage({
 										"relative h-14 w-14 sm:h-20 sm:w-20 rounded-md sm:rounded-lg overflow-hidden flex-shrink-0 border-2 transition-colors",
 										selectedImageIndex === index
 											? "border-primary"
-											: "border-transparent hover:border-muted-foreground/30"
+											: "border-transparent hover:border-muted-foreground/30",
 									)}
 								>
 									<Image
@@ -409,7 +436,9 @@ export default function ProductDetailPage({
 				{/* Product Info */}
 				<div className="space-y-4 sm:space-y-6">
 					{/* Title */}
-					<h1 className="text-xl sm:text-2xl lg:text-3xl font-bold leading-tight">{product.name}</h1>
+					<h1 className="text-xl sm:text-2xl lg:text-3xl font-bold leading-tight">
+						{product.name}
+					</h1>
 
 					{/* Rating & Sold */}
 					<div className="flex items-center gap-3 sm:gap-4 flex-wrap text-xs sm:text-sm">
@@ -423,7 +452,7 @@ export default function ProductDetailPage({
 												"h-4 w-4 sm:h-5 sm:w-5",
 												i < Math.round(product.rating.score * 5)
 													? "fill-yellow-400 text-yellow-400"
-													: "text-muted-foreground/30"
+													: "text-muted-foreground/30",
 											)}
 										/>
 									))}
@@ -433,7 +462,8 @@ export default function ProductDetailPage({
 										{(product.rating.score * 5).toFixed(1)}
 									</span>
 									<span className="text-muted-foreground">
-										{" "}({product.rating.total} reviews)
+										{" "}
+										({product.rating.total} reviews)
 									</span>
 								</span>
 								<Separator orientation="vertical" className="h-4" />
@@ -449,7 +479,12 @@ export default function ProductDetailPage({
 					{/* Price */}
 					<div className="space-y-1">
 						<div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
-							<span className={cn("text-2xl sm:text-3xl font-bold", discount > 0 && "text-red-600")}>
+							<span
+								className={cn(
+									"text-2xl sm:text-3xl font-bold",
+									discount > 0 && "text-red-600",
+								)}
+							>
 								{selectedSku
 									? formatPrice(selectedSku.price)
 									: priceRange
@@ -468,12 +503,18 @@ export default function ProductDetailPage({
 								<p className="text-xs sm:text-sm text-green-600 font-medium">
 									You save{" "}
 									{formatPrice(
-										(selectedSku?.original_price ?? 0) - (selectedSku?.price ?? 0)
+										(selectedSku?.original_price ?? 0) -
+											(selectedSku?.price ?? 0),
 									)}
 								</p>
 							)}
 							{stockStatus && (
-								<span className={cn("text-xs sm:text-sm font-medium", stockStatus.color)}>
+								<span
+									className={cn(
+										"text-xs sm:text-sm font-medium",
+										stockStatus.color,
+									)}
+								>
 									{stockStatus.label}
 								</span>
 							)}
@@ -521,18 +562,19 @@ export default function ProductDetailPage({
 														key={value}
 														variant={isSelected ? "default" : "outline"}
 														size="sm"
-														onClick={() => handleAttributeSelect(attributeName, value)}
+														onClick={() =>
+															handleAttributeSelect(attributeName, value)
+														}
 														disabled={!isAvailable}
 														className={cn(
 															"relative min-w-[50px] sm:min-w-[60px] text-xs sm:text-sm h-8 sm:h-9 transition-all",
 															!isAvailable && "opacity-50 line-through",
-															isSelected && "ring-2 ring-primary ring-offset-1 sm:ring-offset-2"
+															isSelected &&
+																"ring-2 ring-primary ring-offset-1 sm:ring-offset-2",
 														)}
 													>
 														{value}
-														{isSelected && (
-															<Check className="h-3 w-3 ml-1" />
-														)}
+														{isSelected && <Check className="h-3 w-3 ml-1" />}
 													</Button>
 												)
 											})}
@@ -546,10 +588,14 @@ export default function ProductDetailPage({
 								<div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/50 rounded-lg p-2.5 sm:p-3">
 									<Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
 									<span className="truncate">
-										Selected: {selectedSku.attributes?.map(a => a.value).join(" / ")}
+										Selected:{" "}
+										{selectedSku.attributes?.map((a) => a.value).join(" / ")}
 									</span>
 									{selectedSku.taken !== undefined && selectedSku.taken > 0 && (
-										<Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
+										<Badge
+											variant="secondary"
+											className="ml-auto text-xs flex-shrink-0"
+										>
 											{selectedSku.taken}+ sold
 										</Badge>
 									)}
@@ -566,13 +612,15 @@ export default function ProductDetailPage({
 					)}
 
 					{/* Single SKU display */}
-					{!hasMultipleVariants && product.skus && product.skus.length === 1 && (
-						<div className="text-xs sm:text-sm text-muted-foreground">
-							{selectedSku?.taken !== undefined && selectedSku.taken > 0 && (
-								<span>{selectedSku.taken}+ sold</span>
-							)}
-						</div>
-					)}
+					{!hasMultipleVariants &&
+						product.skus &&
+						product.skus.length === 1 && (
+							<div className="text-xs sm:text-sm text-muted-foreground">
+								{selectedSku?.taken !== undefined && selectedSku.taken > 0 && (
+									<span>{selectedSku.taken}+ sold</span>
+								)}
+							</div>
+						)}
 
 					{/* Quantity */}
 					<div className="space-y-2 sm:space-y-3">
@@ -588,7 +636,9 @@ export default function ProductDetailPage({
 								>
 									<Minus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
 								</Button>
-								<span className="w-10 sm:w-12 text-center font-medium text-sm sm:text-base">{quantity}</span>
+								<span className="w-10 sm:w-12 text-center font-medium text-sm sm:text-base">
+									{quantity}
+								</span>
 								<Button
 									variant="ghost"
 									size="icon"
@@ -616,10 +666,12 @@ export default function ProductDetailPage({
 							size="lg"
 							className={cn(
 								"flex-1 h-11 sm:h-12 text-sm sm:text-base transition-all",
-								justAdded && "bg-green-600 hover:bg-green-700"
+								justAdded && "bg-green-600 hover:bg-green-700",
 							)}
 							onClick={handleAddToCart}
-							disabled={isAddingToCart || !selectedSku || (selectedSku?.stock ?? 0) <= 0}
+							disabled={
+								isAddingToCart || !selectedSku || (selectedSku?.stock ?? 0) <= 0
+							}
 						>
 							{justAdded ? (
 								<>
@@ -638,10 +690,25 @@ export default function ProductDetailPage({
 								</>
 							)}
 						</Button>
-						<Button size="lg" variant="outline" className="h-11 w-11 sm:h-12 sm:w-12 p-0" onClick={handleWishlist}>
-							<Heart className={cn("h-4 w-4 sm:h-5 sm:w-5", isWishlisted && "fill-red-500 text-red-500")} />
+						<Button
+							size="lg"
+							variant="outline"
+							className="h-11 w-11 sm:h-12 sm:w-12 p-0"
+							onClick={handleWishlist}
+						>
+							<Heart
+								className={cn(
+									"h-4 w-4 sm:h-5 sm:w-5",
+									isWishlisted && "fill-red-500 text-red-500",
+								)}
+							/>
 						</Button>
-						<Button size="lg" variant="outline" className="h-11 w-11 sm:h-12 sm:w-12 p-0 hidden sm:flex" onClick={handleShare}>
+						<Button
+							size="lg"
+							variant="outline"
+							className="h-11 w-11 sm:h-12 sm:w-12 p-0 hidden sm:flex"
+							onClick={handleShare}
+						>
 							<Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
 						</Button>
 					</div>
@@ -660,7 +727,9 @@ export default function ProductDetailPage({
 								<div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-muted">
 									<Icon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
 								</div>
-								<span className="text-[10px] sm:text-xs text-muted-foreground leading-tight">{text}</span>
+								<span className="text-[10px] sm:text-xs text-muted-foreground leading-tight">
+									{text}
+								</span>
 							</div>
 						))}
 					</div>
@@ -690,7 +759,9 @@ export default function ProductDetailPage({
 										<Avatar className="h-12 w-12 sm:h-16 sm:w-16 border-2 border-primary/10">
 											<AvatarImage src={vendor.avatar_url ?? undefined} />
 											<AvatarFallback className="bg-primary/5 text-primary text-lg sm:text-xl font-semibold">
-												{vendor.name?.charAt(0) || vendor.username?.charAt(0) || "S"}
+												{vendor.name?.charAt(0) ||
+													vendor.username?.charAt(0) ||
+													"S"}
 											</AvatarFallback>
 										</Avatar>
 										<div className="flex-1 min-w-0">
@@ -699,7 +770,10 @@ export default function ProductDetailPage({
 													{vendor.name || vendor.username || "Store"}
 												</h3>
 												{vendor.status === "Active" && (
-													<Badge variant="secondary" className="bg-green-500/10 text-green-600 border-0 text-xs">
+													<Badge
+														variant="secondary"
+														className="bg-green-500/10 text-green-600 border-0 text-xs"
+													>
 														<BadgeCheck className="h-3 w-3 mr-0.5 sm:mr-1" />
 														<span className="hidden sm:inline">Verified</span>
 													</Badge>
@@ -713,7 +787,13 @@ export default function ProductDetailPage({
 											<div className="flex items-center gap-4 mt-2 sm:mt-3 text-xs sm:text-sm text-muted-foreground">
 												<div className="flex items-center gap-1">
 													<Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-													<span>Joined {new Date(vendor.date_created).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</span>
+													<span>
+														Joined{" "}
+														{new Date(vendor.date_created).toLocaleDateString(
+															"en-US",
+															{ month: "short", year: "numeric" },
+														)}
+													</span>
 												</div>
 											</div>
 										</div>
@@ -725,25 +805,42 @@ export default function ProductDetailPage({
 									<div className="grid grid-cols-3 gap-4 text-center mb-4">
 										<div>
 											<div className="text-base sm:text-lg font-bold text-primary">
-												{vendorStats ? (vendorStats.average_rating * 5).toFixed(1) : "–"}
+												{vendorStats
+													? (vendorStats.average_rating * 5).toFixed(1)
+													: "–"}
 											</div>
-											<div className="text-[10px] sm:text-xs text-muted-foreground">Rating</div>
+											<div className="text-[10px] sm:text-xs text-muted-foreground">
+												Rating
+											</div>
 										</div>
 										<div>
 											<div className="text-base sm:text-lg font-bold text-primary">
-												{vendorStats ? `${Math.round(vendorStats.response_rate * 100)}%` : "–"}
+												{vendorStats
+													? `${Math.round(vendorStats.response_rate * 100)}%`
+													: "–"}
 											</div>
-											<div className="text-[10px] sm:text-xs text-muted-foreground">Response</div>
+											<div className="text-[10px] sm:text-xs text-muted-foreground">
+												Response
+											</div>
 										</div>
 										<div>
 											<div className="text-base sm:text-lg font-bold text-primary">
-												{vendorStats ? formatSoldCount(vendorStats.product_count) : "–"}
+												{vendorStats
+													? formatSoldCount(vendorStats.product_count)
+													: "–"}
 											</div>
-											<div className="text-[10px] sm:text-xs text-muted-foreground">Products</div>
+											<div className="text-[10px] sm:text-xs text-muted-foreground">
+												Products
+											</div>
 										</div>
 									</div>
 									<div className="flex gap-2">
-										<Button variant="outline" size="sm" className="flex-1 h-9 text-xs sm:text-sm" asChild>
+										<Button
+											variant="outline"
+											size="sm"
+											className="flex-1 h-9 text-xs sm:text-sm"
+											asChild
+										>
 											<Link href={`/store/${vendor.id}`}>
 												<Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
 												Visit Store
@@ -764,7 +861,9 @@ export default function ProductDetailPage({
 						) : (
 							<div className="p-4 sm:p-6 text-center text-muted-foreground">
 								<Store className="h-6 w-6 sm:h-8 sm:w-8 mx-auto mb-2 opacity-50" />
-								<p className="text-xs sm:text-sm">Store information unavailable</p>
+								<p className="text-xs sm:text-sm">
+									Store information unavailable
+								</p>
 							</div>
 						)}
 					</CardContent>
@@ -786,10 +885,12 @@ export default function ProductDetailPage({
 											key={index}
 											className={cn(
 												"grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-4 py-2.5 sm:py-3 px-3 sm:px-4",
-												index % 2 === 0 ? "bg-muted/50" : "bg-background"
+												index % 2 === 0 ? "bg-muted/50" : "bg-background",
 											)}
 										>
-											<span className="text-xs sm:text-sm text-muted-foreground font-medium">{spec.name}</span>
+											<span className="text-xs sm:text-sm text-muted-foreground font-medium">
+												{spec.name}
+											</span>
 											<span className="text-xs sm:text-sm">{spec.value}</span>
 										</div>
 									))}
@@ -806,11 +907,19 @@ export default function ProductDetailPage({
 							<>
 								<Separator />
 								<div>
-									<h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Tags</h2>
+									<h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">
+										Tags
+									</h2>
 									<div className="flex flex-wrap gap-2">
 										{product.tags.map((tag) => (
-											<Link key={tag} href={`/search?q=${encodeURIComponent(tag)}`}>
-												<Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 transition-colors">
+											<Link
+												key={tag}
+												href={`/search?q=${encodeURIComponent(tag)}`}
+											>
+												<Badge
+													variant="secondary"
+													className="cursor-pointer hover:bg-secondary/80 transition-colors"
+												>
 													{tag}
 												</Badge>
 											</Link>
@@ -824,10 +933,16 @@ export default function ProductDetailPage({
 
 						{/* Description Section */}
 						<div>
-							<h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Product Description</h2>
+							<h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">
+								Product Description
+							</h2>
 							<div
 								className="prose prose-sm sm:prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-p:text-muted-foreground prose-li:text-muted-foreground"
-								dangerouslySetInnerHTML={{ __html: product.description || "<p class='text-center py-4'>No description available for this product.</p>" }}
+								dangerouslySetInnerHTML={{
+									__html:
+										product.description ||
+										"<p class='text-center py-4'>No description available for this product.</p>",
+								}}
 							/>
 						</div>
 					</CardContent>
@@ -845,7 +960,9 @@ export default function ProductDetailPage({
 			{(isLoadingRecommended ||
 				(recommendedProducts && recommendedProducts.length > 0)) && (
 				<section className="mt-8 sm:mt-12">
-					<h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">You May Also Like</h2>
+					<h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">
+						You May Also Like
+					</h2>
 					{isLoadingRecommended ? (
 						<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
 							{Array.from({ length: 6 }).map((_, i) => (
@@ -862,7 +979,12 @@ export default function ProductDetailPage({
 				</section>
 			)}
 			{/* Buy Now Confirmation Dialog */}
-			<Dialog open={isBuyNowOpen} onOpenChange={(open) => { if (!isBuyNowProcessing) setIsBuyNowOpen(open) }}>
+			<Dialog
+				open={isBuyNowOpen}
+				onOpenChange={(open) => {
+					if (!isBuyNowProcessing) setIsBuyNowOpen(open)
+				}}
+			>
 				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>Confirm Purchase</DialogTitle>
@@ -886,12 +1008,15 @@ export default function ProductDetailPage({
 									</div>
 								)}
 								<div className="flex-1 min-w-0">
-									<p className="text-sm font-medium line-clamp-2">{product.name}</p>
-									{selectedSku.attributes && selectedSku.attributes.length > 0 && (
-										<p className="text-xs text-muted-foreground mt-0.5">
-											{selectedSku.attributes.map(a => a.value).join(" / ")}
-										</p>
-									)}
+									<p className="text-sm font-medium line-clamp-2">
+										{product.name}
+									</p>
+									{selectedSku.attributes &&
+										selectedSku.attributes.length > 0 && (
+											<p className="text-xs text-muted-foreground mt-0.5">
+												{selectedSku.attributes.map((a) => a.value).join(" / ")}
+											</p>
+										)}
 								</div>
 							</div>
 
@@ -910,7 +1035,13 @@ export default function ProductDetailPage({
 								{discount > 0 && (
 									<div className="flex justify-between text-green-600">
 										<span>Discount ({discount}%)</span>
-										<span>-{formatPrice((selectedSku.original_price - selectedSku.price) * quantity)}</span>
+										<span>
+											-
+											{formatPrice(
+												(selectedSku.original_price - selectedSku.price) *
+													quantity,
+											)}
+										</span>
 									</div>
 								)}
 								<Separator />
@@ -932,10 +1063,7 @@ export default function ProductDetailPage({
 						>
 							Cancel
 						</Button>
-						<Button
-							onClick={handleConfirmBuyNow}
-							disabled={isBuyNowProcessing}
-						>
+						<Button onClick={handleConfirmBuyNow} disabled={isBuyNowProcessing}>
 							{isBuyNowProcessing ? (
 								<>
 									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -972,7 +1100,10 @@ function ProductDetailSkeleton() {
 					<Skeleton className="aspect-square rounded-lg sm:rounded-xl" />
 					<div className="flex gap-2">
 						{Array.from({ length: 4 }).map((_, i) => (
-							<Skeleton key={i} className="h-14 w-14 sm:h-20 sm:w-20 rounded-md sm:rounded-lg flex-shrink-0" />
+							<Skeleton
+								key={i}
+								className="h-14 w-14 sm:h-20 sm:w-20 rounded-md sm:rounded-lg flex-shrink-0"
+							/>
 						))}
 					</div>
 				</div>
@@ -1000,7 +1131,10 @@ function ProductDetailSkeleton() {
 					</div>
 					<div className="grid grid-cols-3 gap-2 sm:gap-4 pt-2">
 						{Array.from({ length: 3 }).map((_, i) => (
-							<div key={i} className="flex flex-col items-center gap-1.5 sm:gap-2">
+							<div
+								key={i}
+								className="flex flex-col items-center gap-1.5 sm:gap-2"
+							>
 								<Skeleton className="h-8 w-8 sm:h-10 sm:w-10 rounded-full" />
 								<Skeleton className="h-2.5 sm:h-3 w-14 sm:w-16" />
 							</div>

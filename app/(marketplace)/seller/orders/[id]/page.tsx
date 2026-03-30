@@ -3,7 +3,7 @@
 import { use } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useGetOrder, TOrder } from "@/core/order/order.buyer"
+import { useGetBuyerOrder, TOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +23,19 @@ import {
   ShoppingCart,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
+import { useGetAccount } from "@/core/account/account"
+
+function summarizeOrder(items?: Array<{ sku_name: string }>): string {
+  if (!items?.length) return "Order"
+  if (items.length === 1) return items[0].sku_name
+  if (items.length === 2) return `${items[0].sku_name}, ${items[1].sku_name}`
+  return `${items[0].sku_name} and ${items.length - 1} more`
+}
+
+function AccountName({ id, fallback = "User" }: { id: string; fallback?: string }) {
+  const { data } = useGetAccount(id)
+  return <>{data?.name || data?.username || fallback}</>
+}
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType; color: string }> = {
   Pending: { label: "Pending", variant: "secondary", icon: Clock, color: "text-yellow-600" },
@@ -41,7 +54,7 @@ const steps = [
 
 export default function SellerOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { data: order, isLoading } = useGetOrder(id)
+  const { data: order, isLoading } = useGetBuyerOrder(id)
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -114,7 +127,8 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">Order #{order.id.slice(0, 8)}</h1>
+              <h1 className="text-2xl font-bold">{summarizeOrder(order.items)}</h1>
+              <p className="text-sm text-muted-foreground">#{order.id.slice(0, 8)}</p>
               <Button
                 variant="ghost"
                 size="icon"
@@ -211,9 +225,9 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{item.sku_name}</h4>
+                    <Link href={`/product/${item.spu_id}`} className="font-medium truncate text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{item.sku_name}</Link>
                     <p className="text-sm text-muted-foreground">
-                      SKU: {item.sku_id.slice(0, 8)}
+                      SKU: {item.sku_name}
                     </p>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-sm">Qty: {item.quantity}</span>
@@ -254,7 +268,8 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium">Buyer #{order.buyer_id.slice(0, 8)}</p>
+              <p className="font-medium"><AccountName id={order.buyer_id} fallback="Buyer" /></p>
+              <p className="text-sm text-muted-foreground">#{order.buyer_id.slice(0, 8)}</p>
             </CardContent>
           </Card>
 
