@@ -13,7 +13,7 @@ export const useCreateInteraction = () =>
   useMutation({
     mutationFn: async (params: {
       interactions: Array<{
-        event_type: 'view' | 'add_to_cart' | 'purchase' | 'rating'
+        event_type: 'view' | 'add_to_cart' | 'purchase' | 'rating' | 'product_impression' | 'checkout_started'
         ref_type: 'Product' | 'Category' | 'Brand' | 'Vendor'
         ref_id: string
       }>
