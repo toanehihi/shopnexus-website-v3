@@ -1,16 +1,17 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import Image from "next/image"
 import {
 	useListComments,
-	useCreateComment,
+	useUpdateComment,
+	useVoteComment,
+	useDeleteComment,
+	useListReviewableOrders,
 	TComment,
 } from "@/core/catalog/comment.customer"
-import { useUploadFile } from "@/core/common/file"
+import { WriteReviewDialog } from "@/components/product/write-review-dialog"
 import { useGetMe } from "@/core/account/account"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -32,10 +33,13 @@ import {
 	Pencil,
 	ImageIcon,
 	MessageCircle,
-	Upload,
-	X,
+	ShoppingBag,
+	Trash2,
+	MessageCircleReply,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { MediaGrid } from "@/components/ui/media-viewer"
+import { toast } from "@/components/ui/sonner"
 
 interface ProductReviewsProps {
 	productId: string
@@ -71,16 +75,8 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 			ref_id: productId,
 			...(scoreFilter && { score_from: scoreFilter.score_from, score_to: scoreFilter.score_to }),
 		})
-	const createComment = useCreateComment()
-
+	const { data: reviewableOrders } = useListReviewableOrders(productId)
 	const [isWriteDialogOpen, setIsWriteDialogOpen] = useState(false)
-	const [reviewScore, setReviewScore] = useState(5)
-	const [reviewBody, setReviewBody] = useState("")
-	const [reviewFiles, setReviewFiles] = useState<File[]>([])
-	const [uploadedIds, setUploadedIds] = useState<string[]>([])
-	const [previewUrls, setPreviewUrls] = useState<string[]>([])
-	const uploadFile = useUploadFile()
-	const [hoverScore, setHoverScore] = useState<number | null>(null)
 
 	const comments = data?.pages.flatMap((page) => page.data) ?? []
 
@@ -96,47 +92,6 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 				return true
 		}
 	})
-
-	const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const files = Array.from(e.target.files || [])
-		const newFiles = files.slice(0, 5 - reviewFiles.length) // max 5 files
-		setReviewFiles(prev => [...prev, ...newFiles])
-		setPreviewUrls(prev => [...prev, ...newFiles.map(f => URL.createObjectURL(f))])
-		e.target.value = "" // reset input
-	}
-
-	const removeFile = (index: number) => {
-		URL.revokeObjectURL(previewUrls[index])
-		setReviewFiles(prev => prev.filter((_, i) => i !== index))
-		setPreviewUrls(prev => prev.filter((_, i) => i !== index))
-	}
-
-	const handleSubmitReview = async () => {
-		try {
-			// Upload files first
-			const ids: string[] = []
-			for (const file of reviewFiles) {
-				const result = await uploadFile.mutateAsync(file)
-				ids.push(result.id)
-			}
-
-			await createComment.mutateAsync({
-				ref_type: "ProductSpu",
-				ref_id: productId,
-				body: reviewBody,
-				score: reviewScore / 5,
-				resource_ids: ids,
-			})
-			setIsWriteDialogOpen(false)
-			setReviewBody("")
-			setReviewScore(5)
-			setReviewFiles([])
-			previewUrls.forEach(url => URL.revokeObjectURL(url))
-			setPreviewUrls([])
-		} catch (err) {
-			console.error("Failed to submit review:", err)
-		}
-	}
 
 	const formatDate = (dateStr: string) => {
 		return new Date(dateStr).toLocaleDateString("en-US", {
@@ -166,14 +121,16 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div id="reviews" className="space-y-6">
 			{/* Section Header */}
 			<div className="flex items-center justify-between">
 				<h2 className="text-lg font-semibold">Product Reviews</h2>
-				<Button onClick={() => setIsWriteDialogOpen(true)} size="sm">
-					<Pencil className="h-4 w-4 mr-2" />
-					Write a Review
-				</Button>
+				{reviewableOrders && reviewableOrders.length > 0 && (
+					<Button onClick={() => setIsWriteDialogOpen(true)} size="sm">
+						<Pencil className="h-4 w-4 mr-2" />
+						Write a Review
+					</Button>
+				)}
 			</div>
 
 			{/* Rating Summary - Shopee Style */}
@@ -335,6 +292,7 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 							key={comment.id}
 							comment={comment}
 							formatDate={formatDate}
+							currentUserId={user?.id}
 						/>
 					))}
 
@@ -359,118 +317,11 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 				</div>
 			)}
 
-			{/* Write Review Dialog */}
-			<Dialog open={isWriteDialogOpen} onOpenChange={setIsWriteDialogOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Write a Review</DialogTitle>
-						<DialogDescription>
-							Share your experience with this product
-						</DialogDescription>
-					</DialogHeader>
-
-					<div className="space-y-4 py-4">
-						{/* Star Rating */}
-						<div className="space-y-2">
-							<label className="text-sm font-medium">Your Rating</label>
-							<div className="flex items-center gap-1">
-								{[1, 2, 3, 4, 5].map((star) => (
-									<button
-										key={star}
-										type="button"
-										onMouseEnter={() => setHoverScore(star)}
-										onMouseLeave={() => setHoverScore(null)}
-										onClick={() => setReviewScore(star)}
-										className="p-1"
-									>
-										<Star
-											className={cn(
-												"h-8 w-8 transition-colors",
-												star <= (hoverScore ?? reviewScore)
-													? "fill-yellow-400 text-yellow-400"
-													: "text-muted-foreground/30"
-											)}
-										/>
-									</button>
-								))}
-								<span className="ml-2 text-sm text-muted-foreground">
-									{reviewScore} out of 5
-								</span>
-							</div>
-						</div>
-
-						{/* Review Text */}
-						<div className="space-y-2">
-							<label className="text-sm font-medium">Your Review</label>
-							<Textarea
-								placeholder="What did you like or dislike about this product?"
-								className="min-h-[120px]"
-								value={reviewBody}
-								onChange={(e) => setReviewBody(e.target.value)}
-							/>
-						</div>
-
-						{/* File Upload */}
-						<div className="space-y-2">
-							<label className="text-sm font-medium">Photos / Videos</label>
-							<div className="flex flex-wrap gap-2">
-								{previewUrls.map((url, i) => (
-									<div key={i} className="relative h-20 w-20 rounded-md overflow-hidden border">
-										<img src={url} alt="" className="h-full w-full object-cover" />
-										<button
-											type="button"
-											onClick={() => removeFile(i)}
-											className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80"
-										>
-											<X className="h-3 w-3" />
-										</button>
-									</div>
-								))}
-								{reviewFiles.length < 5 && (
-									<label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-muted-foreground/30 hover:border-muted-foreground/50 transition-colors">
-										<Upload className="h-5 w-5 text-muted-foreground" />
-										<input
-											type="file"
-											accept="image/*,video/*"
-											multiple
-											onChange={handleFileSelect}
-											className="hidden"
-										/>
-									</label>
-								)}
-							</div>
-							<p className="text-xs text-muted-foreground">Up to 5 files. Images or videos.</p>
-						</div>
-					</div>
-
-					<DialogFooter>
-						<Button
-							variant="outline"
-							onClick={() => setIsWriteDialogOpen(false)}
-						>
-							Cancel
-						</Button>
-						<Button
-							onClick={handleSubmitReview}
-							disabled={createComment.isPending || uploadFile.isPending || !reviewBody.trim()}
-						>
-							{uploadFile.isPending ? (
-								<>
-									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-									Uploading...
-								</>
-							) : createComment.isPending ? (
-								<>
-									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-									Submitting...
-								</>
-							) : (
-								"Submit Review"
-							)}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<WriteReviewDialog
+				productId={productId}
+				open={isWriteDialogOpen}
+				onOpenChange={setIsWriteDialogOpen}
+			/>
 		</div>
 	)
 }
@@ -478,85 +329,241 @@ export function ProductReviews({ productId, rating }: ProductReviewsProps) {
 function ReviewCard({
 	comment,
 	formatDate,
+	currentUserId,
 }: {
 	comment: TComment
 	formatDate: (date: string) => string
+	currentUserId?: string
 }) {
-	return (
-		<div className="border rounded-lg p-4">
-			<div className="flex gap-4">
-				<Avatar className="h-10 w-10">
-					<AvatarImage src={comment.profile?.avatar_url ?? undefined} />
-					<AvatarFallback>
-						{comment.profile?.name?.charAt(0) ||
-							comment.profile?.username?.charAt(0) ||
-							"U"}
-					</AvatarFallback>
-				</Avatar>
+	const voteMutation = useVoteComment()
+	const deleteMutation = useDeleteComment()
+	const updateMutation = useUpdateComment()
+	const isOwn = currentUserId === comment.profile?.id
 
-				<div className="flex-1 min-w-0">
-					<div className="flex items-center justify-between gap-2">
-						<div>
-							<p className="font-medium">
-								{comment.profile?.name ||
-									comment.profile?.username ||
-									"Anonymous"}
-							</p>
-							<div className="flex items-center gap-2 mt-1">
-								<div className="flex items-center gap-0.5">
-									{Array.from({ length: 5 }).map((_, i) => (
+	const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+	const [showEditDialog, setShowEditDialog] = useState(false)
+	const [editBody, setEditBody] = useState(comment.body)
+	const [editScore, setEditScore] = useState(Math.round(comment.score * 5))
+	const [editHoverScore, setEditHoverScore] = useState<number | null>(null)
+
+	const handleDelete = async () => {
+		try {
+			await deleteMutation.mutateAsync({ ids: [comment.id] })
+			setShowDeleteDialog(false)
+			toast.success("Review deleted.")
+		} catch {
+			toast.error("Failed to delete review.")
+		}
+	}
+
+	const handleEdit = async () => {
+		try {
+			await updateMutation.mutateAsync({
+				id: comment.id,
+				body: editBody,
+				score: editScore / 5,
+				resource_ids: comment.resources?.map((r) => r.id) ?? [],
+			})
+			setShowEditDialog(false)
+			toast.success("Review updated.")
+		} catch {
+			toast.error("Failed to update review.")
+		}
+	}
+
+	return (
+		<>
+			<div className="border rounded-lg p-4">
+				<div className="flex gap-4">
+					<Avatar className="h-10 w-10">
+						<AvatarImage src={comment.profile?.avatar_url ?? undefined} />
+						<AvatarFallback>
+							{comment.profile?.name?.charAt(0) ||
+								comment.profile?.username?.charAt(0) ||
+								"U"}
+						</AvatarFallback>
+					</Avatar>
+
+					<div className="flex-1 min-w-0">
+						<div className="flex items-start justify-between gap-2">
+							<div>
+								<p className="font-medium">
+									{comment.profile?.name ||
+										comment.profile?.username ||
+										"Anonymous"}
+								</p>
+								<div className="flex items-center gap-2 mt-1">
+									<div className="flex items-center gap-0.5">
+										{Array.from({ length: 5 }).map((_, i) => (
+											<Star
+												key={i}
+												className={cn(
+													"h-3 w-3",
+													i < Math.round(comment.score * 5)
+														? "fill-yellow-400 text-yellow-400"
+														: "text-muted-foreground/30"
+												)}
+											/>
+										))}
+									</div>
+									<span className="text-xs text-muted-foreground">
+										{formatDate(comment.date_created)}
+									</span>
+								</div>
+							</div>
+
+							{/* Edit/Delete for own reviews */}
+							{isOwn && (
+								<div className="flex items-center gap-1">
+									<button
+										className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+										onClick={() => {
+											setEditBody(comment.body)
+											setEditScore(Math.round(comment.score * 5))
+											setShowEditDialog(true)
+										}}
+										title="Edit review"
+									>
+										<Pencil className="h-3.5 w-3.5" />
+									</button>
+									<button
+										className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+										onClick={() => setShowDeleteDialog(true)}
+										title="Delete review"
+									>
+										<Trash2 className="h-3.5 w-3.5" />
+									</button>
+								</div>
+							)}
+						</div>
+
+						{/* SKU variant + purchase date */}
+						{(comment.order_item_name || comment.order_date) && (
+							<div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+								{comment.order_item_name && (
+									<span className="inline-flex items-center gap-1 bg-muted px-2 py-0.5 rounded">
+										<ShoppingBag className="h-3 w-3" />
+										{comment.order_item_name}
+									</span>
+								)}
+								{comment.order_date && (
+									<span>Purchased {formatDate(comment.order_date)}</span>
+								)}
+							</div>
+						)}
+
+						<p className="text-sm text-muted-foreground mt-3">{comment.body}</p>
+
+						{/* Review Media */}
+						<MediaGrid resources={comment.resources} size="sm" className="mt-3" />
+
+						{/* Helpful Buttons + Reply Count */}
+						<div className="flex items-center gap-4 mt-4">
+							<button
+								className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+								disabled={voteMutation.isPending}
+								onClick={() => voteMutation.mutate({ comment_id: comment.id, vote: 'upvote' })}
+							>
+								<ThumbsUp className="h-3.5 w-3.5" />
+								Helpful ({comment.upvote})
+							</button>
+							<button
+								className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+								disabled={voteMutation.isPending}
+								onClick={() => voteMutation.mutate({ comment_id: comment.id, vote: 'downvote' })}
+							>
+								<ThumbsDown className="h-3.5 w-3.5" />
+								({comment.downvote})
+							</button>
+							{comment.reply_count > 0 && (
+								<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+									<MessageCircleReply className="h-3.5 w-3.5" />
+									{comment.reply_count} {comment.reply_count === 1 ? "reply" : "replies"}
+								</span>
+							)}
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{/* Edit Review Dialog */}
+			<Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Edit Review</DialogTitle>
+						<DialogDescription>Update your rating and review text.</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4 py-4">
+						<div className="space-y-2">
+							<label className="text-sm font-medium">Your Rating</label>
+							<div className="flex items-center gap-1">
+								{[1, 2, 3, 4, 5].map((star) => (
+									<button
+										key={star}
+										type="button"
+										onMouseEnter={() => setEditHoverScore(star)}
+										onMouseLeave={() => setEditHoverScore(null)}
+										onClick={() => setEditScore(star)}
+										className="p-1"
+									>
 										<Star
-											key={i}
 											className={cn(
-												"h-3 w-3",
-												i < Math.round(comment.score * 5)
+												"h-8 w-8 transition-colors",
+												star <= (editHoverScore ?? editScore)
 													? "fill-yellow-400 text-yellow-400"
 													: "text-muted-foreground/30"
 											)}
 										/>
-									))}
-								</div>
-								<span className="text-xs text-muted-foreground">
-									{formatDate(comment.date_created)}
+									</button>
+								))}
+								<span className="ml-2 text-sm text-muted-foreground">
+									{editScore} out of 5
 								</span>
 							</div>
 						</div>
-					</div>
-
-					<p className="text-sm text-muted-foreground mt-3">{comment.body}</p>
-
-					{/* Review Images */}
-					{comment.resources && comment.resources.length > 0 && (
-						<div className="flex gap-2 mt-3 flex-wrap">
-							{comment.resources.map((resource, idx) => (
-								<div
-									key={idx}
-									className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-90 transition-opacity"
-								>
-									<Image
-										src={resource.url}
-										alt="Review"
-										fill
-										className="object-cover"
-									/>
-								</div>
-							))}
+						<div className="space-y-2">
+							<label className="text-sm font-medium">Your Review</label>
+							<Textarea
+								className="min-h-[120px]"
+								value={editBody}
+								onChange={(e) => setEditBody(e.target.value)}
+							/>
 						</div>
-					)}
-
-					{/* Helpful Buttons */}
-					<div className="flex items-center gap-4 mt-4">
-						<button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-							<ThumbsUp className="h-3.5 w-3.5" />
-							Helpful ({comment.upvote})
-						</button>
-						<button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-							<ThumbsDown className="h-3.5 w-3.5" />
-							({comment.downvote})
-						</button>
 					</div>
-				</div>
-			</div>
-		</div>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+						<Button onClick={handleEdit} disabled={updateMutation.isPending || !editBody.trim()}>
+							{updateMutation.isPending ? (
+								<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+							) : (
+								"Save Changes"
+							)}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Delete Confirmation Dialog */}
+			<Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Delete Review</DialogTitle>
+						<DialogDescription>
+							Are you sure you want to delete this review? This action cannot be undone.
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+						<Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
+							{deleteMutation.isPending ? (
+								<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting...</>
+							) : (
+								"Delete Review"
+							)}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		</>
 	)
 }

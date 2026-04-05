@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useGetMe } from "@/core/account/account"
-import { useSignOut } from "@/core/account/auth"
+import { useRequireAuth, useSignOut } from "@/core/account/auth"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -21,7 +21,6 @@ import {
   Settings,
   LogOut,
   Store,
-  Inbox,
 } from "lucide-react"
 
 const personalLinks = [
@@ -33,7 +32,6 @@ const personalLinks = [
 const sellerLinks = [
   { href: "/seller", label: "Dashboard", icon: BarChart3 },
   { href: "/seller/products", label: "Products", icon: Package },
-  { href: "/seller/incoming", label: "Incoming Items", icon: Inbox },
   { href: "/seller/orders", label: "Orders", icon: ShoppingCart },
   { href: "/seller/refunds", label: "Refunds", icon: RotateCcw },
   { href: "/seller/promotions", label: "Promotions", icon: Tag },
@@ -44,10 +42,13 @@ export default function SellerLayout({
 }: {
   children: React.ReactNode
 }) {
+  const isAuthenticated = useRequireAuth()
   const pathname = usePathname()
   const router = useRouter()
   const { data: user, isLoading } = useGetMe()
   const signOut = useSignOut()
+
+  if (!isAuthenticated) return null
 
   const handleSignOut = async () => {
     await signOut.mutateAsync()

@@ -3,7 +3,10 @@
 import { Suspense, useMemo, useState, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { useListProductCards, TProductCard } from "@/core/catalog/product.customer"
+import {
+	useListProductCards,
+	TProductCard,
+} from "@/core/catalog/product.customer"
 import { useListCategories } from "@/core/catalog/category"
 import { ProductCard } from "@/components/product/product-card"
 import { Button } from "@/components/ui/button"
@@ -55,6 +58,7 @@ function SearchContent() {
 	const router = useRouter()
 	const query = searchParams.get("q") || ""
 	const categoryParam = searchParams.get("category") || ""
+	const tagParams = searchParams.getAll("tag")
 
 	// Filter states
 	const [sortBy, setSortBy] = useState<string>("relevance")
@@ -63,7 +67,7 @@ function SearchContent() {
 	const [customPriceMax, setCustomPriceMax] = useState("")
 	const [minRating, setMinRating] = useState<number | null>(null)
 	const [selectedCategories, setSelectedCategories] = useState<string[]>(
-		categoryParam ? [categoryParam] : []
+		categoryParam ? [categoryParam] : [],
 	)
 	const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
 
@@ -74,7 +78,11 @@ function SearchContent() {
 		fetchNextPage,
 		hasNextPage,
 		isFetchingNextPage,
-	} = useListProductCards({ limit: 48, search: query || undefined })
+	} = useListProductCards({
+		limit: 48,
+		search: query || undefined,
+		...(tagParams.length > 0 ? { tag: tagParams } : {}),
+	})
 
 	const { data: categoriesData } = useListCategories({ limit: 50 })
 
@@ -116,7 +124,7 @@ function SearchContent() {
 		// Category filter
 		if (selectedCategories.length > 0) {
 			result = result.filter((product) =>
-				selectedCategories.includes(product.category_id)
+				selectedCategories.includes(product.category_id),
 			)
 		}
 
@@ -134,7 +142,8 @@ function SearchContent() {
 			case "newest":
 				result.sort(
 					(a, b) =>
-						new Date(b.date_created).getTime() - new Date(a.date_created).getTime()
+						new Date(b.date_created).getTime() -
+						new Date(a.date_created).getTime(),
 				)
 				break
 			default:
@@ -143,7 +152,15 @@ function SearchContent() {
 		}
 
 		return result
-	}, [allProducts, selectedPriceRanges, customPriceMin, customPriceMax, minRating, selectedCategories, sortBy])
+	}, [
+		allProducts,
+		selectedPriceRanges,
+		customPriceMin,
+		customPriceMax,
+		minRating,
+		selectedCategories,
+		sortBy,
+	])
 
 	const activeFiltersCount = useMemo(() => {
 		let count = 0
@@ -152,7 +169,13 @@ function SearchContent() {
 		if (minRating !== null) count++
 		if (selectedCategories.length > 0) count++
 		return count
-	}, [selectedPriceRanges, customPriceMin, customPriceMax, minRating, selectedCategories])
+	}, [
+		selectedPriceRanges,
+		customPriceMin,
+		customPriceMax,
+		minRating,
+		selectedCategories,
+	])
 
 	const clearAllFilters = useCallback(() => {
 		setSelectedPriceRanges([])
@@ -164,7 +187,7 @@ function SearchContent() {
 
 	const togglePriceRange = (label: string) => {
 		setSelectedPriceRanges((prev) =>
-			prev.includes(label) ? prev.filter((r) => r !== label) : [...prev, label]
+			prev.includes(label) ? prev.filter((r) => r !== label) : [...prev, label],
 		)
 		// Clear custom price when using presets
 		setCustomPriceMin("")
@@ -175,7 +198,7 @@ function SearchContent() {
 		setSelectedCategories((prev) =>
 			prev.includes(categoryId)
 				? prev.filter((c) => c !== categoryId)
-				: [...prev, categoryId]
+				: [...prev, categoryId],
 		)
 	}
 
@@ -321,6 +344,16 @@ function SearchContent() {
 							Search results for &quot;
 							<span className="text-primary">{query}</span>&quot;
 						</>
+					) : tagParams.length > 0 ? (
+						<>
+							Tagged with{" "}
+							{tagParams.map((tag, i) => (
+								<span key={tag}>
+									{i > 0 && ", "}
+									<span className="text-primary">{tag}</span>
+								</span>
+							))}
+						</>
 					) : (
 						"Browse Products"
 					)}
@@ -328,12 +361,13 @@ function SearchContent() {
 				{!isLoading && (
 					<p className="text-muted-foreground mt-2">
 						{filteredProducts.length} of {allProducts.length} products
-						{activeFiltersCount > 0 && ` (${activeFiltersCount} filter${activeFiltersCount > 1 ? "s" : ""} applied)`}
+						{activeFiltersCount > 0 &&
+							` (${activeFiltersCount} filter${activeFiltersCount > 1 ? "s" : ""} applied)`}
 					</p>
 				)}
 			</div>
 
-			{!query && allProducts.length === 0 && !isLoading ? (
+			{!query && tagParams.length === 0 && allProducts.length === 0 && !isLoading ? (
 				<div className="text-center py-16">
 					<div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6">
 						<Search className="h-10 w-10 text-muted-foreground" />
@@ -371,7 +405,10 @@ function SearchContent() {
 						{/* Mobile Filter & Sort Bar */}
 						<div className="flex items-center justify-between mb-6 gap-4">
 							{/* Mobile Filter Button */}
-							<Sheet open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
+							<Sheet
+								open={isMobileFiltersOpen}
+								onOpenChange={setIsMobileFiltersOpen}
+							>
 								<SheetTrigger asChild>
 									<Button variant="outline" size="sm" className="lg:hidden">
 										<SlidersHorizontal className="h-4 w-4 mr-2" />
@@ -436,7 +473,12 @@ function SearchContent() {
 								{(customPriceMin || customPriceMax) && (
 									<Badge variant="secondary" className="gap-1">
 										${customPriceMin || "0"} - ${customPriceMax || "∞"}
-										<button onClick={() => { setCustomPriceMin(""); setCustomPriceMax(""); }}>
+										<button
+											onClick={() => {
+												setCustomPriceMin("")
+												setCustomPriceMax("")
+											}}
+										>
 											<X className="h-3 w-3" />
 										</button>
 									</Badge>
@@ -476,7 +518,9 @@ function SearchContent() {
 								<div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6">
 									<Search className="h-10 w-10 text-muted-foreground" />
 								</div>
-								<h2 className="text-xl font-semibold mb-2">No products found</h2>
+								<h2 className="text-xl font-semibold mb-2">
+									No products found
+								</h2>
 								<p className="text-muted-foreground max-w-md mx-auto mb-6">
 									{activeFiltersCount > 0
 										? "Try adjusting your filters to find more products."

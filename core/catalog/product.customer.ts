@@ -75,6 +75,8 @@ export const useListProductCards = (
   params: PaginationParams<{
     search?: string
     vendor_id?: string
+    category_id?: string[]
+    tag?: string[]
   }>,
   options?: {
     enabled?: boolean

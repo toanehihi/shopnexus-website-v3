@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useChatContext } from "./chat-context"
 import { useGetMe, useGetAccount } from "@/core/account/account"
 import { ChatMessage, useListMessages } from "@/core/chat/chat"
-import { useChatSocket } from "@/core/chat/use-chat-socket"
+import { useEventStream, useSendMessage, useMarkRead as useChatMarkRead } from "@/core/chat/use-chat-socket"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -151,7 +151,9 @@ function ChatPanelContent({
   onClose: () => void
 }) {
   const { data: vendor } = useGetAccount(vendorId)
-  const { sendMessage, markRead, isConnected, lastMessage } = useChatSocket()
+  const { isConnected, lastMessage } = useEventStream()
+  const sendMessageMutation = useSendMessage()
+  const markReadMutation = useChatMarkRead()
   const [inputValue, setInputValue] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -164,12 +166,15 @@ function ChatPanelContent({
   } = useListMessages(conversationId, { limit: 50 })
 
   const messages = useMemo(() => {
-    const allMessages =
-      messagesData?.pages.flatMap((page) => page.data) ?? []
-    return [...allMessages].sort(
-      (a, b) =>
-        new Date(a.date_created).getTime() - new Date(b.date_created).getTime()
-    )
+    const pages = messagesData?.pages ?? []
+    const allMessages: ChatMessage[] = []
+    for (let i = pages.length - 1; i >= 0; i--) {
+      const pageData = pages[i].data
+      for (let j = pageData.length - 1; j >= 0; j--) {
+        allMessages.push(pageData[j])
+      }
+    }
+    return allMessages
   }, [messagesData])
 
   const vendorName =
@@ -177,8 +182,8 @@ function ChatPanelContent({
 
   // Mark as read when opened
   useEffect(() => {
-    markRead(conversationId)
-  }, [conversationId, markRead])
+    markReadMutation.mutate({ conversation_id: conversationId })
+  }, [conversationId])
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -189,7 +194,7 @@ function ChatPanelContent({
     const trimmed = inputValue.trim()
     if (!trimmed) return
 
-    sendMessage({
+    sendMessageMutation.mutate({
       conversation_id: conversationId,
       type: "Text",
       content: trimmed,

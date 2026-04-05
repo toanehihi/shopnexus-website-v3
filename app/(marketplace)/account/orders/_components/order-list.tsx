@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Package, ChevronRight, ShoppingBag, Loader2, CreditCard } from "lucide-react"
+import { WriteReviewDialog } from "@/components/product/write-review-dialog"
+import { Package, ChevronRight, ShoppingBag, Loader2, CreditCard, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -31,12 +32,18 @@ function summarizeOrder(items?: Array<{ sku_name: string }>): string {
   return `${items[0].sku_name} and ${items.length - 1} more`
 }
 
-const statusColors: Record<string, string> = {
-  Pending: "bg-yellow-100 text-yellow-800",
-  Confirmed: "bg-blue-100 text-blue-800",
-  Shipped: "bg-purple-100 text-purple-800",
-  Delivered: "bg-green-100 text-green-800",
-  Cancelled: "bg-red-100 text-red-800",
+function getOrderDisplayStatus(order: TOrder): { label: string; color: string } {
+  const ps = order.payment?.status
+  const ts = order.transport?.status
+
+  if (!order.payment) return { label: "Unpaid", color: "bg-yellow-100 text-yellow-800" }
+  if (ps === "Pending") return { label: "Awaiting Payment", color: "bg-yellow-100 text-yellow-800" }
+  if (ps === "Failed") return { label: "Payment Failed", color: "bg-red-100 text-red-800" }
+  if (ps === "Cancelled") return { label: "Cancelled", color: "bg-red-100 text-red-800" }
+  if (ts === "Delivered") return { label: "Completed", color: "bg-green-100 text-green-800" }
+  if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", color: "bg-purple-100 text-purple-800" }
+  if (ts === "Failed" || ts === "Cancelled") return { label: "Delivery Failed", color: "bg-red-100 text-red-800" }
+  return { label: "Processing", color: "bg-blue-100 text-blue-800" }
 }
 
 export function OrderList({
@@ -54,6 +61,7 @@ export function OrderList({
 }) {
   const payMutation = usePayBuyerOrders()
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null)
+  const [reviewingOrder, setReviewingOrder] = useState<{ orderId: string; spuId: string } | null>(null)
   const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
   const { data: paymentMethods } = useListPaymentMethods()
   const { data: serviceOptions } = useListServiceOption({ category: "payment" })
@@ -120,9 +128,9 @@ export function OrderList({
         <Card key={order.id}>
           <CardContent className="p-4">
             {/* Order Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-sm font-medium truncate">
                   {summarizeOrder(order.items)}
                 </span>
                 <div className="flex items-center gap-4 text-sm">
@@ -135,17 +143,14 @@ export function OrderList({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {order.payment === null && (
-                  <Badge variant="destructive" className="font-normal">
-                    Unpaid
-                  </Badge>
-                )}
-                <Badge
-                  variant="secondary"
-                  className={cn("font-normal", statusColors[order.status] ?? "")}
-                >
-                  {order.status}
-                </Badge>
+                {(() => {
+                  const displayStatus = getOrderDisplayStatus(order)
+                  return (
+                    <Badge variant="secondary" className={cn("font-normal", displayStatus.color)}>
+                      {displayStatus.label}
+                    </Badge>
+                  )
+                })()}
               </div>
             </div>
 
@@ -202,11 +207,14 @@ export function OrderList({
                     Complete Payment
                   </Button>
                 )}
-                {order.status === "Delivered" && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/account/orders/${order.id}/refund`}>
-                      Request Refund
-                    </Link>
+                {order.payment?.status === "Success" && order.transport?.status === "Delivered" && order.items[0] && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReviewingOrder({ orderId: order.id, spuId: order.items[0].spu_id })}
+                  >
+                    <Star className="h-4 w-4 mr-1" />
+                    Leave a Review
                   </Button>
                 )}
                 <Button variant="outline" size="sm" asChild>
@@ -359,6 +367,16 @@ export function OrderList({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Write Review Dialog */}
+      {reviewingOrder && (
+        <WriteReviewDialog
+          productId={reviewingOrder.spuId}
+          defaultOrderId={reviewingOrder.orderId}
+          open={true}
+          onOpenChange={(open) => { if (!open) setReviewingOrder(null) }}
+        />
+      )}
     </div>
   )
 }

@@ -27,6 +27,15 @@ export type TOrderItem = {
   resources: Resource[]
 }
 
+export type TTransport = {
+  id: string
+  option: string
+  status: string
+  cost: number
+  data: Record<string, any>
+  date_created: string
+}
+
 export type TPayment = {
   id: string
   account_id: string
@@ -44,9 +53,8 @@ export type TOrder = {
   id: string
   buyer_id: string
   seller_id: string
-  transport_id: string | null
+  transport: TTransport | null
   payment: TPayment | null
-  status: string
   address: string
   product_cost: number
   product_discount: number
@@ -135,7 +143,9 @@ export const useGetBuyerOrder = (id: string) =>
     enabled: !!id,
   })
 
-export const useListBuyerConfirmed = (params: PaginationParams<unknown>) =>
+export const useListBuyerConfirmed = (params: PaginationParams<{
+  payment_status?: string[]
+}>) =>
   useInfiniteQueryPagination<TOrder>(
     ['order', 'buyer', 'confirmed'],
     'order/buyer/confirmed',

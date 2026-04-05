@@ -30,7 +30,7 @@ export type ProductSku = {
   id: string
   spu_id: string
   price: number
-  can_combine: boolean
+  combinable: boolean
   date_created: string
   stock: number
 
@@ -149,7 +149,7 @@ export const useListProductSKU = (params?: {
   spu_id?: string
   price_from?: number
   price_to?: number
-  can_combine?: boolean
+  combinable?: boolean
 }) =>
   useQuery({
     queryKey: ['product-sku', 'list', params],
@@ -163,7 +163,7 @@ export const useCreateProductSKU = () => {
     mutationFn: (params: {
       spu_id: string
       price: number
-      can_combine: boolean
+      combinable: boolean
       attributes?: ProductAttribute[]
       package_details: Record<string, any>
     }) =>
@@ -184,7 +184,7 @@ export const useUpdateProductSKU = () => {
     mutationFn: (params: {
       id: string
       price?: number
-      can_combine?: boolean
+      combinable?: boolean
       attributes?: ProductAttribute[]
       package_details?: Record<string, any>
     }) =>

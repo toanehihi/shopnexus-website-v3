@@ -1,54 +1,36 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useGetMe } from "@/core/account/account"
+import { memo, useCallback, useMemo, useRef, useState, useEffect } from "react"
+import { useGetMe, useGetAccount } from "@/core/account/account"
 import {
   Conversation,
   ChatMessage,
   useListConversations,
   useListMessages,
 } from "@/core/chat/chat"
-import { useChatSocket } from "@/core/chat/use-chat-socket"
+import { useSendMessage, useMarkRead as useChatMarkRead } from "@/core/chat/use-chat-socket"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { MessageCircle, Send, Check, CheckCheck, ArrowLeft } from "lucide-react"
+import { MessageCircle, Send, Check, CheckCheck, ArrowLeft, Loader2 } from "lucide-react"
 
 export default function ChatPage() {
   const { data: me } = useGetMe()
-  const { sendMessage, markRead, isConnected, lastMessage } = useChatSocket()
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [showMobileMessages, setShowMobileMessages] = useState(false)
 
-  const {
-    data: conversationsData,
-    isLoading: conversationsLoading,
-  } = useListConversations({ limit: 50 })
-
-  const conversations = useMemo(
-    () => conversationsData?.pages.flatMap((page) => page.data) ?? [],
-    [conversationsData]
-  )
-
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.id === selectedConversationId) ?? null,
-    [conversations, selectedConversationId]
-  )
-
-  const handleSelectConversation = (id: string) => {
+  const handleSelectConversation = useCallback((id: string) => {
     setSelectedConversationId(id)
     setShowMobileMessages(true)
-    markRead(id)
-  }
+  }, [])
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setShowMobileMessages(false)
-  }
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -56,9 +38,6 @@ export default function ChatPage() {
         <h1 className="text-2xl font-bold">Messages</h1>
         <p className="text-muted-foreground">
           Chat with vendors and customers
-          {isConnected && (
-            <span className="inline-block ml-2 h-2 w-2 rounded-full bg-green-500" />
-          )}
         </p>
       </div>
 
@@ -76,32 +55,11 @@ export default function ChatPage() {
                 Conversations
               </h2>
             </div>
-            <ScrollArea className="flex-1">
-              {conversationsLoading ? (
-                <ConversationListSkeleton />
-              ) : conversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
-                    <MessageCircle className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    No conversations yet
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {conversations.map((conversation) => (
-                    <ConversationItem
-                      key={conversation.id}
-                      conversation={conversation}
-                      isActive={conversation.id === selectedConversationId}
-                      currentUserId={me?.id ?? ""}
-                      onClick={() => handleSelectConversation(conversation.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
+            <ConversationList
+              selectedId={selectedConversationId}
+              currentUserId={me?.id ?? ""}
+              onSelect={handleSelectConversation}
+            />
           </div>
 
           {/* Right Panel - Message Area */}
@@ -111,13 +69,11 @@ export default function ChatPage() {
               showMobileMessages ? "flex" : "hidden md:flex"
             )}
           >
-            {selectedConversation && me ? (
+            {selectedConversationId && me ? (
               <MessagePanel
-                conversation={selectedConversation}
+                key={selectedConversationId}
+                conversationId={selectedConversationId}
                 currentUserId={me.id}
-                sendMessage={sendMessage}
-                markRead={markRead}
-                lastMessage={lastMessage}
                 onBack={handleBackToList}
               />
             ) : (
@@ -140,9 +96,60 @@ export default function ChatPage() {
   )
 }
 
+// ===== Conversation List (isolated from message panel re-renders) =====
+
+const ConversationList = memo(function ConversationList({
+  selectedId,
+  currentUserId,
+  onSelect,
+}: {
+  selectedId: string | null
+  currentUserId: string
+  onSelect: (id: string) => void
+}) {
+  const {
+    data: conversationsData,
+    isLoading,
+  } = useListConversations({ limit: 50 })
+
+  const conversations = useMemo(
+    () => conversationsData?.pages.flatMap((page) => page.data) ?? [],
+    [conversationsData]
+  )
+
+  if (isLoading) return <ConversationListSkeleton />
+
+  if (conversations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+          <MessageCircle className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">No conversations yet</p>
+      </div>
+    )
+  }
+
+  return (
+    <ScrollArea className="flex-1">
+      <div className="divide-y">
+        {conversations.map((conversation) => (
+          <ConversationItem
+            key={conversation.id}
+            conversation={conversation}
+            isActive={conversation.id === selectedId}
+            currentUserId={currentUserId}
+            onClick={() => onSelect(conversation.id)}
+          />
+        ))}
+      </div>
+    </ScrollArea>
+  )
+})
+
 // ===== Conversation Item =====
 
-function ConversationItem({
+const ConversationItem = memo(function ConversationItem({
   conversation,
   isActive,
   currentUserId,
@@ -155,9 +162,8 @@ function ConversationItem({
 }) {
   const isCustomer = conversation.buyer_id === currentUserId
   const partnerId = isCustomer ? conversation.seller_id : conversation.buyer_id
-  const partnerLabel = isCustomer ? "Seller" : "Buyer"
-  const partnerInitial = partnerLabel.charAt(0)
-  const truncatedId = partnerId.slice(0, 8)
+  const { data: partner } = useGetAccount(partnerId)
+  const partnerName = partner?.name || partner?.username || (isCustomer ? "Seller" : "Buyer")
 
   return (
     <button
@@ -168,12 +174,12 @@ function ConversationItem({
       )}
     >
       <Avatar className="h-10 w-10 flex-shrink-0">
-        <AvatarFallback>{partnerInitial}</AvatarFallback>
+        <AvatarFallback>{partnerName.charAt(0).toUpperCase()}</AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium truncate">
-            {partnerLabel} #{truncatedId}
+            {partnerName}
           </p>
           {conversation.last_message_at && (
             <span className="text-xs text-muted-foreground flex-shrink-0">
@@ -182,36 +188,41 @@ function ConversationItem({
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate mt-0.5">
-          Conversation #{conversation.id.slice(0, 8)}
+          {isCustomer ? "Seller" : "Buyer"}
         </p>
       </div>
     </button>
   )
-}
+})
 
-// ===== Message Panel =====
+// ===== Message Panel (fully self-contained, owns its own data) =====
 
 function MessagePanel({
-  conversation,
+  conversationId,
   currentUserId,
-  sendMessage,
-  markRead,
-  lastMessage,
   onBack,
 }: {
-  conversation: Conversation
+  conversationId: string
   currentUserId: string
-  sendMessage: (payload: {
-    conversation_id: string
-    type: "Text" | "Image" | "System"
-    content: string
-  }) => void
-  markRead: (conversationId: string) => void
-  lastMessage: ChatMessage | null
   onBack: () => void
 }) {
   const [inputValue, setInputValue] = useState("")
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const prevMessageCountRef = useRef(0)
+  const sendMessageMutation = useSendMessage()
+  const markReadMutation = useChatMarkRead()
+
+  // Resolve partner name from conversations cache
+  const { data: convsData } = useListConversations({ limit: 50 })
+  const conv = useMemo(
+    () => convsData?.pages.flatMap((p) => p.data).find((c) => c.id === conversationId),
+    [convsData, conversationId]
+  )
+  const partnerId = conv
+    ? conv.buyer_id === currentUserId ? conv.seller_id : conv.buyer_id
+    : ""
+  const { data: partner } = useGetAccount(partnerId)
+  const partnerName = partner?.name || partner?.username || "Chat"
 
   const {
     data: messagesData,
@@ -219,39 +230,40 @@ function MessagePanel({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useListMessages(conversation.id, { limit: 50 })
+  } = useListMessages(conversationId, { limit: 50 })
 
   const messages = useMemo(() => {
-    const allMessages =
-      messagesData?.pages.flatMap((page) => page.data) ?? []
-    // Sort by date ascending so newest are at the bottom
-    return [...allMessages].sort(
-      (a, b) =>
-        new Date(a.date_created).getTime() - new Date(b.date_created).getTime()
-    )
+    // Pages come in DESC order (newest first) from the API.
+    // Reverse pages so older pages come first, then reverse each page's items.
+    const pages = messagesData?.pages ?? []
+    const allMessages: ChatMessage[] = []
+    for (let i = pages.length - 1; i >= 0; i--) {
+      const pageData = pages[i].data
+      for (let j = pageData.length - 1; j >= 0; j--) {
+        allMessages.push(pageData[j])
+      }
+    }
+    return allMessages
   }, [messagesData])
 
-  const isCustomer = conversation.buyer_id === currentUserId
-  const partnerId = isCustomer ? conversation.seller_id : conversation.buyer_id
-  const partnerLabel = isCustomer ? "Seller" : "Buyer"
-  const partnerInitial = partnerLabel.charAt(0)
-
-  // Mark conversation as read when opened
+  // Mark as read on mount (once per conversation)
   useEffect(() => {
-    markRead(conversation.id)
-  }, [conversation.id, markRead])
+    markReadMutation.mutate({ conversation_id: conversationId })
+  }, [conversationId])
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll within the messages container only when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length, lastMessage])
+    if (messages.length > prevMessageCountRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+    prevMessageCountRef.current = messages.length
+  }, [messages.length])
 
   const handleSend = () => {
     const trimmed = inputValue.trim()
     if (!trimmed) return
-
-    sendMessage({
-      conversation_id: conversation.id,
+    sendMessageMutation.mutate({
+      conversation_id: conversationId,
       type: "Text",
       content: trimmed,
     })
@@ -278,17 +290,17 @@ function MessagePanel({
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <Avatar className="h-9 w-9">
-          <AvatarFallback>{partnerInitial}</AvatarFallback>
+          <AvatarFallback>{partnerName.charAt(0).toUpperCase()}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">
-            {partnerLabel} #{partnerId.slice(0, 8)}
+            {partnerName}
           </p>
         </div>
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         {messagesLoading ? (
           <MessagesSkeleton />
         ) : (
@@ -316,11 +328,7 @@ function MessagePanel({
 
             {messages.map((message, index) => {
               const isSent = message.sender_id === currentUserId
-              const showDate = shouldShowDate(
-                message,
-                messages[index - 1] ?? null
-              )
-
+              const showDate = shouldShowDate(message, messages[index - 1] ?? null)
               return (
                 <div key={message.id}>
                   {showDate && (
@@ -330,18 +338,14 @@ function MessagePanel({
                       </span>
                     </div>
                   )}
-                  <MessageBubble
-                    message={message}
-                    isSent={isSent}
-                  />
+                  <MessageBubble message={message} isSent={isSent} />
                 </div>
               )
             })}
 
-            <div ref={messagesEndRef} />
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Input */}
       <div className="p-4 border-t">
@@ -356,9 +360,13 @@ function MessagePanel({
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || sendMessageMutation.isPending}
           >
-            <Send className="h-4 w-4" />
+            {sendMessageMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>
@@ -368,7 +376,7 @@ function MessagePanel({
 
 // ===== Message Bubble =====
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   message,
   isSent,
 }: {
@@ -376,12 +384,7 @@ function MessageBubble({
   isSent: boolean
 }) {
   return (
-    <div
-      className={cn(
-        "flex mb-1",
-        isSent ? "justify-end" : "justify-start"
-      )}
-    >
+    <div className={cn("flex mb-1", isSent ? "justify-end" : "justify-start")}>
       <div
         className={cn(
           "max-w-[75%] rounded-2xl px-4 py-2",
@@ -402,9 +405,7 @@ function MessageBubble({
           <span
             className={cn(
               "text-[10px]",
-              isSent
-                ? "text-primary-foreground/70"
-                : "text-muted-foreground"
+              isSent ? "text-primary-foreground/70" : "text-muted-foreground"
             )}
           >
             {formatTime(message.date_created)}
@@ -419,22 +420,10 @@ function MessageBubble({
             </span>
           )}
         </div>
-        {isSent && message.status === "Read" && (
-          <p
-            className={cn(
-              "text-[10px] text-right",
-              isSent
-                ? "text-primary-foreground/60"
-                : "text-muted-foreground/60"
-            )}
-          >
-            Read
-          </p>
-        )}
       </div>
     </div>
   )
-}
+})
 
 // ===== Skeletons =====
 
@@ -458,16 +447,8 @@ function MessagesSkeleton() {
   return (
     <div className="space-y-4">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className={cn("flex", i % 2 === 0 ? "justify-start" : "justify-end")}
-        >
-          <Skeleton
-            className={cn(
-              "h-10 rounded-2xl",
-              i % 2 === 0 ? "w-48" : "w-36"
-            )}
-          />
+        <div key={i} className={cn("flex", i % 2 === 0 ? "justify-start" : "justify-end")}>
+          <Skeleton className={cn("h-10 rounded-2xl", i % 2 === 0 ? "w-48" : "w-36")} />
         </div>
       ))}
     </div>
@@ -477,9 +458,7 @@ function MessagesSkeleton() {
 // ===== Utilities =====
 
 function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+  const diffMs = Date.now() - new Date(dateStr).getTime()
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
@@ -488,7 +467,7 @@ function formatRelativeTime(dateStr: string): string {
   if (diffMins < 60) return `${diffMins}m`
   if (diffHours < 24) return `${diffHours}h`
   if (diffDays < 7) return `${diffDays}d`
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
 
 function formatTime(dateStr: string): string {
@@ -501,27 +480,14 @@ function formatTime(dateStr: string): string {
 function formatMessageDate(dateStr: string): string {
   const date = new Date(dateStr)
   const now = new Date()
-  const isToday = date.toDateString() === now.toDateString()
-
+  if (date.toDateString() === now.toDateString()) return "Today"
   const yesterday = new Date(now)
   yesterday.setDate(yesterday.getDate() - 1)
-  const isYesterday = date.toDateString() === yesterday.toDateString()
-
-  if (isToday) return "Today"
-  if (isYesterday) return "Yesterday"
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday"
+  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
 }
 
-function shouldShowDate(
-  current: ChatMessage,
-  previous: ChatMessage | null
-): boolean {
+function shouldShowDate(current: ChatMessage, previous: ChatMessage | null): boolean {
   if (!previous) return true
-  const currentDate = new Date(current.date_created).toDateString()
-  const previousDate = new Date(previous.date_created).toDateString()
-  return currentDate !== previousDate
+  return new Date(current.date_created).toDateString() !== new Date(previous.date_created).toDateString()
 }

@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { customFetchStandard } from '@/lib/queryclient/custom-fetch'
 import type { PaginationParams } from '@/lib/queryclient/response.type'
 import { useInfiniteQueryPagination } from '@/lib/queryclient/use-infinite-query'
@@ -14,9 +14,19 @@ export type TComment = {
   upvote: number
   downvote: number
   score: number
+  order_id: string | null
   date_created: string
   date_updated: string
   resources: Resource[]
+  order_item_name?: string
+  order_date?: string
+  reply_count: number
+}
+
+export type TReviewableOrder = {
+  id: string
+  total: number
+  date_created: string
 }
 
 // ===== Hooks =====
@@ -35,6 +45,16 @@ export const useListComments = (params: PaginationParams<{
     params
   )
 
+export const useListReviewableOrders = (spuId: string) =>
+  useQuery({
+    queryKey: ['comment', 'reviewable-orders', spuId],
+    queryFn: () =>
+      customFetchStandard<TReviewableOrder[]>(
+        `catalog/comment/reviewable-orders?spu_id=${spuId}`,
+      ),
+    enabled: !!spuId,
+  })
+
 export const useCreateComment = () => {
   const qc = useQueryClient()
   return useMutation({
@@ -43,6 +63,7 @@ export const useCreateComment = () => {
       ref_id: string
       body: string
       score: number
+      order_id: string
       resource_ids: string[]
     }) =>
       customFetchStandard<TComment>('catalog/comment', {
@@ -72,6 +93,23 @@ export const useUpdateComment = () => {
     onSuccess: async (_, variables) => {
       await qc.invalidateQueries({ queryKey: ['comment', 'list'] })
       await qc.invalidateQueries({ queryKey: ['comment', 'detail', variables.id] })
+    },
+  })
+}
+
+export const useVoteComment = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: {
+      comment_id: string
+      vote: 'upvote' | 'downvote'
+    }) =>
+      customFetchStandard<TComment>('catalog/comment/vote', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['comment', 'list'] })
     },
   })
 }

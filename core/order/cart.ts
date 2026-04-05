@@ -2,6 +2,7 @@ import { customFetchStandard } from "@/lib/queryclient/custom-fetch"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { getQueryClient } from "@/lib/queryclient/query-client"
 import { Resource } from "../common/resource.type"
+import { useIsAuthenticated } from "@/core/account/auth"
 
 import { ProductSku } from "../catalog/product.vendor"
 
@@ -18,11 +19,14 @@ export type Cart = CartItem[]
 
 // ===== Hooks =====
 
-export const useGetCart = () =>
-  useQuery({
+export const useGetCart = () => {
+  const isAuthenticated = useIsAuthenticated()
+  return useQuery({
     queryKey: ['account', 'cart'],
     queryFn: async () => customFetchStandard<Cart>('order/cart'),
+    enabled: isAuthenticated,
   })
+}
 
 export const useUpdateCart = () =>
   useMutation({

@@ -165,7 +165,7 @@ export default function SellerRefundsPage() {
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium">Refund #{refund.id.slice(0, 8)}</h3>
+                        <h3 className="font-medium">Refund request</h3>
                         <Badge variant={status.variant} className="gap-1">
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
@@ -186,7 +186,7 @@ export default function SellerRefundsPage() {
                       </div>
 
                       <p className="text-sm text-muted-foreground">
-                        Order #{refund.order_id.slice(0, 8)} • {formatDate(refund.date_created)}
+                        #{refund.id.slice(0, 8)} &middot; Order #{refund.order_id.slice(0, 8)} &middot; {formatDate(refund.date_created)}
                       </p>
 
                       <div className="flex items-start gap-2 text-sm">

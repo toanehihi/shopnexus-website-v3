@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
+import { useRequireAuth } from "@/core/account/auth"
 import { useGetCart, useUpdateCart, useClearCart } from "@/core/order/cart"
 import { formatPrice } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -22,7 +23,10 @@ import {
 } from "lucide-react"
 
 export default function CartPage() {
+  const isAuthenticated = useRequireAuth()
   const { data: cart, isLoading } = useGetCart()
+
+  if (!isAuthenticated) return null
   const updateCart = useUpdateCart()
   const clearCart = useClearCart()
 

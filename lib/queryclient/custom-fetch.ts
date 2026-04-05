@@ -40,11 +40,7 @@ export async function customFetch<TResponse = unknown>(
     if (refreshed) {
       response = await runRequest()
     } else {
-      // Refresh failed — clear tokens and redirect to login
       clearAuth()
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
       throw new ResponseError(401, 'auth.expired', 'Session expired. Please log in again.')
     }
   }
@@ -52,9 +48,6 @@ export async function customFetch<TResponse = unknown>(
   // If still 401 after refresh retry (e.g., new token also expired)
   if (response.status === 401) {
     clearAuth()
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login'
-    }
     throw new ResponseError(401, 'auth.expired', 'Session expired. Please log in again.')
   }
 
@@ -99,9 +92,24 @@ function resolveUrl(base: string, path: string): string {
 function clearAuth() {
   globalThis?.localStorage?.removeItem?.('token')
   globalThis?.localStorage?.removeItem?.('refresh_token')
+  globalThis?.dispatchEvent?.(new Event('auth-change'))
 }
 
+// Deduplicate concurrent refresh calls — only one runs at a time,
+// others await the same promise so the refresh token isn't used twice.
+let inflightRefresh: Promise<boolean> | null = null
+
 async function tryRefreshTokens(): Promise<boolean> {
+  if (inflightRefresh) return inflightRefresh
+  inflightRefresh = doRefresh()
+  try {
+    return await inflightRefresh
+  } finally {
+    inflightRefresh = null
+  }
+}
+
+async function doRefresh(): Promise<boolean> {
   try {
     const refreshToken = globalThis?.localStorage?.getItem?.('refresh_token')
     if (!refreshToken?.length) return false
@@ -124,6 +132,7 @@ async function tryRefreshTokens(): Promise<boolean> {
 
     globalThis?.localStorage?.setItem?.('token', newAccess)
     globalThis?.localStorage?.setItem?.('refresh_token', newRefresh)
+    globalThis?.dispatchEvent?.(new Event('auth-change'))
     return true
   } catch {
     return false

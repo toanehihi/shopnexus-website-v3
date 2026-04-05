@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { useRequireAuth } from "@/core/account/auth"
 import { useGetCart } from "@/core/order/cart"
 import { useBuyerCheckout } from "@/core/order/order.buyer"
 import { useListContacts, AddressType, type Contact } from "@/core/account/contact"
@@ -27,8 +28,11 @@ import {
 import { toast } from "sonner"
 
 export default function CheckoutPage() {
+  const isAuthenticated = useRequireAuth()
   const router = useRouter()
   const { data: cart, isLoading: cartLoading } = useGetCart()
+
+  if (!isAuthenticated) return null
   const { data: contacts, isLoading: contactsLoading } = useListContacts()
   const { data: user } = useGetMe()
 
@@ -65,7 +69,7 @@ export default function CheckoutPage() {
       })
 
       toast.success("Checkout successful! Items are now pending.")
-      router.push("/account/pending-items")
+      router.push("/account/orders")
     } catch (error) {
       toast.error("Failed to checkout. Please try again.")
       console.error(error)

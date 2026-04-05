@@ -55,6 +55,7 @@ import {
 	BadgeCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { MediaViewerDialog } from "@/components/ui/media-viewer"
 import { toast } from "@/components/ui/sonner"
 import { useChatContext } from "@/components/chat/chat-context"
 
@@ -85,6 +86,7 @@ export default function ProductDetailPage({
 		useState<SelectedAttributes>({})
 	const [quantity, setQuantity] = useState(1)
 	const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+	const [mediaViewerOpen, setMediaViewerOpen] = useState(false)
 	const [isAddingToCart, setIsAddingToCart] = useState(false)
 	const [justAdded, setJustAdded] = useState(false)
 	const [isWishlisted, setIsWishlisted] = useState(false)
@@ -307,7 +309,7 @@ export default function ProductDetailPage({
 			toast.success("Order placed successfully!", {
 				description: `${product?.name} x${quantity} - ${formatPrice(selectedSku.price * quantity)}`,
 			})
-			router.push("/account/pending-items")
+			router.push("/account/orders")
 		} catch (err: any) {
 			toast.error(err?.message || "Failed to place order")
 		} finally {
@@ -386,15 +388,30 @@ export default function ProductDetailPage({
 			<div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
 				{/* Product Images */}
 				<div className="space-y-3 sm:space-y-4">
-					<div className="relative aspect-square rounded-lg sm:rounded-xl overflow-hidden bg-muted">
+					<div
+						className="relative aspect-4/3 max-h-125 rounded-lg sm:rounded-xl overflow-hidden bg-muted cursor-pointer"
+						onClick={() =>
+							product.resources?.length && setMediaViewerOpen(true)
+						}
+					>
 						{product.resources?.[selectedImageIndex]?.url ? (
-							<Image
-								src={product.resources[selectedImageIndex].url}
-								alt={product.name}
-								fill
-								className="object-cover"
-								priority
-							/>
+							product.resources[selectedImageIndex].mime?.startsWith(
+								"video/",
+							) ? (
+								<video
+									src={product.resources[selectedImageIndex].url}
+									controls
+									className="h-full w-full object-cover"
+								/>
+							) : (
+								<Image
+									src={product.resources[selectedImageIndex].url}
+									alt={product.name}
+									fill
+									className=" object-contain"
+									priority
+								/>
+							)
 						) : (
 							<div className="flex items-center justify-center h-full">
 								<ShoppingCart className="h-16 w-16 sm:h-24 sm:w-24 text-muted-foreground/30" />
@@ -406,6 +423,15 @@ export default function ProductDetailPage({
 							</Badge>
 						)}
 					</div>
+
+					{product.resources && (
+						<MediaViewerDialog
+							resources={product.resources}
+							index={selectedImageIndex}
+							open={mediaViewerOpen}
+							onOpenChange={setMediaViewerOpen}
+						/>
+					)}
 
 					{/* Thumbnail Gallery */}
 					{product.resources && product.resources.length > 1 && (
@@ -914,7 +940,7 @@ export default function ProductDetailPage({
 										{product.tags.map((tag) => (
 											<Link
 												key={tag}
-												href={`/search?q=${encodeURIComponent(tag)}`}
+												href={`/search?tag=${encodeURIComponent(tag)}`}
 											>
 												<Badge
 													variant="secondary"

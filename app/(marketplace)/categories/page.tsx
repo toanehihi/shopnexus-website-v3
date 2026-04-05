@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useListCategories } from "@/core/catalog/category"
 import { Card, CardContent } from "@/components/ui/card"
@@ -48,12 +49,13 @@ export default function CategoriesPage() {
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i}>
               <CardContent className="p-6">
-                <Skeleton className="h-6 w-32 mb-4" />
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-20" />
+                <div className="grid grid-cols-4 gap-1.5 mb-4">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <Skeleton key={j} className="aspect-square rounded-md" />
+                  ))}
                 </div>
+                <Skeleton className="h-6 w-32 mb-2" />
+                <Skeleton className="h-4 w-48" />
               </CardContent>
             </Card>
           ))}
@@ -66,35 +68,56 @@ export default function CategoriesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {rootCategories.map((category) => {
             const children = childrenMap.get(category.id) ?? []
+            const resources = category.resources ?? []
             return (
-              <Card key={category.id} className="group hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
+              <Card key={category.id} className="group hover:shadow-lg transition-shadow overflow-hidden">
+                <Link href={`/categories/${category.id}`}>
+                  {resources.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-1 p-2 pb-0">
+                      {resources.slice(0, 4).map((resource) => (
+                        <div key={resource.id} className="aspect-square relative rounded-md overflow-hidden bg-muted">
+                          <Image
+                            src={resource.url}
+                            alt=""
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                            sizes="(max-width: 768px) 25vw, 10vw"
+                          />
+                        </div>
+                      ))}
+                      {/* Fill empty slots */}
+                      {Array.from({ length: Math.max(0, 4 - resources.length) }).map((_, i) => (
+                        <div key={`empty-${i}`} className="aspect-square rounded-md bg-muted/50" />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-24 bg-gradient-to-br from-primary/5 to-primary/10 flex items-center justify-center">
+                      <span className="text-4xl font-bold text-primary/30">
+                        {category.name.charAt(0)}
+                      </span>
+                    </div>
+                  )}
+                </Link>
+                <CardContent className="p-4">
                   <Link
                     href={`/categories/${category.id}`}
-                    className="flex items-center justify-between mb-4"
+                    className="flex items-center justify-between mb-2"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                        <span className="text-xl font-bold text-primary">
-                          {category.name.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <h2 className="font-semibold text-lg group-hover:text-primary transition-colors">
-                          {category.name}
-                        </h2>
-                        {category.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-1">
-                            {category.description}
-                          </p>
-                        )}
-                      </div>
+                    <div>
+                      <h2 className="font-semibold text-lg group-hover:text-primary transition-colors">
+                        {category.name}
+                      </h2>
+                      {category.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-1">
+                          {category.description}
+                        </p>
+                      )}
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
                   </Link>
 
                   {children.length > 0 && (
-                    <div className="border-t pt-4 space-y-2">
+                    <div className="border-t pt-3 space-y-1.5">
                       {children.slice(0, 5).map((child) => (
                         <Link
                           key={child.id}

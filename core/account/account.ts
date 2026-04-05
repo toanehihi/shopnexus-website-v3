@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { getQueryClient } from '@/lib/queryclient/query-client'
 import { customFetchStandard } from '@/lib/queryclient/custom-fetch'
+import { useIsAuthenticated } from '@/core/account/auth'
 
 // ===== Types =====
 
@@ -44,11 +45,14 @@ export const useGetAccount = (accountId: string) =>
     enabled: !!accountId,
   })
 
-export const useGetMe = () =>
-  useQuery({
+export const useGetMe = () => {
+  const isAuthenticated = useIsAuthenticated()
+  return useQuery({
     queryKey: ['account', 'me'],
     queryFn: async () => customFetchStandard<AccountProfile>('account/me'),
+    enabled: isAuthenticated,
   })
+}
 
 export const useUpdateMe = () =>
   useMutation({

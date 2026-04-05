@@ -82,7 +82,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   })
   const [skuForm, setSkuForm] = useState({
     price: "",
-    can_combine: true,
+    combinable: true,
     attributes: [] as Array<{ name: string; value: string }>,
     weight_grams: "",
     length_cm: "",
@@ -143,7 +143,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setEditingSKU(sku)
       setSkuForm({
         price: sku.price.toString(),
-        can_combine: sku.can_combine,
+        combinable: sku.combinable,
         attributes: sku.attributes || [],
         weight_grams: sku.package_details?.weight_grams?.toString() || "",
         length_cm: sku.package_details?.length_cm?.toString() || "",
@@ -153,7 +153,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     } else {
       setEditingSKU(null)
       setSkuForm({
-        price: "", can_combine: true, attributes: [],
+        price: "", combinable: true, attributes: [],
         weight_grams: "", length_cm: "", width_cm: "", height_cm: "",
       })
     }
@@ -207,7 +207,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         await updateSKU.mutateAsync({
           id: editingSKU.id,
           price: parseFloat(skuForm.price),
-          can_combine: skuForm.can_combine,
+          combinable: skuForm.combinable,
           attributes: skuForm.attributes.filter((a) => a.name && a.value),
           package_details: packageDetails,
         })
@@ -216,7 +216,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         await createSKU.mutateAsync({
           spu_id: id,
           price: parseFloat(skuForm.price),
-          can_combine: skuForm.can_combine,
+          combinable: skuForm.combinable,
           attributes: skuForm.attributes.filter((a) => a.name && a.value),
           package_details: packageDetails,
         })
@@ -347,7 +347,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{formatPrice(sku.price)}</span>
                         <Badge variant="outline">Stock: {sku.stock}</Badge>
-                        {sku.can_combine && <Badge variant="secondary">Combinable</Badge>}
+                        {sku.combinable && <Badge variant="secondary">Combinable</Badge>}
                       </div>
                       {sku.attributes && sku.attributes.length > 0 && (
                         <div className="flex gap-2 flex-wrap">
@@ -433,12 +433,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
             <div className="flex items-center justify-between py-2">
               <div>
-                <p className="font-medium text-sm">Can Combine</p>
-                <p className="text-xs text-muted-foreground">Allow combining with other items</p>
+                <p className="font-medium text-sm">Bundle in one package</p>
+                <p className="text-xs text-muted-foreground">Ship multiple units together instead of packaging each one separately</p>
               </div>
               <Switch
-                checked={skuForm.can_combine}
-                onCheckedChange={(checked) => setSkuForm({ ...skuForm, can_combine: checked })}
+                checked={skuForm.combinable}
+                onCheckedChange={(checked) => setSkuForm({ ...skuForm, combinable: checked })}
               />
             </div>
 

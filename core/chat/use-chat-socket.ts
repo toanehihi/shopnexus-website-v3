@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { getQueryClient } from '@/lib/queryclient/query-client'
+import { customFetchStandard } from '@/lib/queryclient/custom-fetch'
 import type { ChatMessage } from './chat'
+import type { Notification } from '@/core/account/notification'
 
 // ===== Types =====
 
-type WSMessageEnvelope = {
-  type: string
+type SSEEvent = {
+  type: 'new_message' | 'read_receipt' | 'notification'
   data: any
 }
 
@@ -16,70 +19,61 @@ type SendMessagePayload = {
   metadata?: Record<string, any>
 }
 
-type ReadReceipt = {
-  conversation_id: string
-  reader_id: string
-}
-
 // ===== Constants =====
 
-const BASE_URL = 'https://shopnexus.hopto.org/api/v1/'
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shopnexus.hopto.org/api/v1/'
+
 const MAX_RETRIES = 5
 const BASE_DELAY_MS = 1000
 
-function getWsUrl(): string {
-  // Convert http(s) base URL to ws(s) and point to /ws/chat
-  const url = new URL(BASE_URL)
-  const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+function getSSEUrl(): string {
   const token = globalThis?.localStorage?.getItem?.('token') ?? ''
-  return `${wsProtocol}//${url.host}/ws/chat?token=${encodeURIComponent(token)}`
+  return `${BASE_URL}common/stream?token=${encodeURIComponent(token)}`
 }
 
-// ===== Hook =====
+// ===== SSE Hook =====
 
-export function useChatSocket() {
-  const wsRef = useRef<WebSocket | null>(null)
+export function useEventStream() {
+  const esRef = useRef<EventSource | null>(null)
   const retryCountRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
 
   const [isConnected, setIsConnected] = useState(false)
   const [lastMessage, setLastMessage] = useState<ChatMessage | null>(null)
+  const [lastNotification, setLastNotification] = useState<Notification | null>(null)
 
   const connect = useCallback(() => {
-    // Don't connect if unmounted or already connected
     if (!mountedRef.current) return
-    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return
+    if (esRef.current?.readyState === EventSource.OPEN || esRef.current?.readyState === EventSource.CONNECTING) return
 
     const token = globalThis?.localStorage?.getItem?.('token')
     if (!token?.length) return
 
-    const ws = new WebSocket(getWsUrl())
-    wsRef.current = ws
+    const es = new EventSource(getSSEUrl())
+    esRef.current = es
 
-    ws.onopen = () => {
+    es.onopen = () => {
       if (!mountedRef.current) {
-        ws.close()
+        es.close()
         return
       }
       retryCountRef.current = 0
       setIsConnected(true)
     }
 
-    ws.onclose = () => {
+    es.onerror = () => {
       setIsConnected(false)
+      es.close()
+      esRef.current = null
       if (!mountedRef.current) return
       scheduleReconnect()
     }
 
-    ws.onerror = () => {
-      // onclose will fire after onerror, reconnect is handled there
-    }
-
-    ws.onmessage = (event) => {
+    es.onmessage = (event) => {
       try {
-        const envelope: WSMessageEnvelope = JSON.parse(event.data)
-        handleServerMessage(envelope)
+        const envelope: SSEEvent = JSON.parse(event.data)
+        handleEvent(envelope)
       } catch {
         // Ignore malformed messages
       }
@@ -99,14 +93,13 @@ export function useChatSocket() {
     }, delay)
   }, [connect])
 
-  const handleServerMessage = useCallback((envelope: WSMessageEnvelope) => {
+  const handleEvent = useCallback((envelope: SSEEvent) => {
     const queryClient = getQueryClient()
 
     switch (envelope.type) {
       case 'new_message': {
         const msg = envelope.data as ChatMessage
         setLastMessage(msg)
-        // Invalidate messages for this conversation and the conversations list
         queryClient.invalidateQueries({
           queryKey: ['chat', 'conversation', msg.conversation_id, 'messages'],
         })
@@ -116,7 +109,7 @@ export function useChatSocket() {
         break
       }
       case 'read_receipt': {
-        const receipt = envelope.data as ReadReceipt
+        const receipt = envelope.data as { conversation_id: string; reader_id: string }
         queryClient.invalidateQueries({
           queryKey: ['chat', 'conversation', receipt.conversation_id, 'messages'],
         })
@@ -125,32 +118,15 @@ export function useChatSocket() {
         })
         break
       }
-      case 'error': {
-        console.error('[chat-socket] server error:', envelope.data?.message)
+      case 'notification': {
+        const noti = envelope.data as Notification
+        setLastNotification(noti)
+        queryClient.invalidateQueries({ queryKey: ['notification'] })
         break
       }
     }
   }, [])
 
-  const sendMessage = useCallback((payload: SendMessagePayload) => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return
-    const envelope: WSMessageEnvelope = {
-      type: 'send_message',
-      data: payload,
-    }
-    wsRef.current.send(JSON.stringify(envelope))
-  }, [])
-
-  const markRead = useCallback((conversationId: string) => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return
-    const envelope: WSMessageEnvelope = {
-      type: 'mark_read',
-      data: { conversation_id: conversationId },
-    }
-    wsRef.current.send(JSON.stringify(envelope))
-  }, [])
-
-  // Connect on mount, disconnect on unmount
   useEffect(() => {
     mountedRef.current = true
     connect()
@@ -161,12 +137,50 @@ export function useChatSocket() {
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
       }
-      if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
+      if (esRef.current) {
+        esRef.current.close()
+        esRef.current = null
       }
     }
   }, [connect])
 
-  return { sendMessage, markRead, isConnected, lastMessage }
+  return { isConnected, lastMessage, lastNotification }
 }
+
+// ===== REST Mutations =====
+
+export const useSendMessage = () =>
+  useMutation({
+    mutationFn: async (payload: SendMessagePayload) =>
+      customFetchStandard<ChatMessage>('chat/send-message', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (msg) => {
+      const queryClient = getQueryClient()
+      queryClient.invalidateQueries({
+        queryKey: ['chat', 'conversation', msg.conversation_id, 'messages'],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['chat', 'conversation'],
+      })
+    },
+  })
+
+export const useMarkRead = () =>
+  useMutation({
+    mutationFn: async (params: { conversation_id: string }) =>
+      customFetchStandard<{ message: string }>('chat/mark-read', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+    onSuccess: (_, params) => {
+      const queryClient = getQueryClient()
+      queryClient.invalidateQueries({
+        queryKey: ['chat', 'conversation', params.conversation_id, 'messages'],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['chat', 'conversation'],
+      })
+    },
+  })

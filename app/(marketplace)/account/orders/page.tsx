@@ -1,124 +1,245 @@
 "use client"
 
-import { useMemo } from "react"
-import Link from "next/link"
+import { useMemo, useState } from "react"
 import Image from "next/image"
-import { useListBuyerConfirmed, useListBuyerPending, TOrderItem } from "@/core/order/order.buyer"
+import Link from "next/link"
+import {
+  useListBuyerPending,
+  useListBuyerConfirmed,
+  useCancelBuyerPending,
+  TOrderItem,
+} from "@/core/order/order.buyer"
+import { ProductLink } from "@/components/product/product-link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { OrderList } from "./_components/order-list"
-import { Package, Clock, CheckCircle, XCircle, ChevronRight, ShoppingBag } from "lucide-react"
+import {
+  Package,
+  Clock,
+  Loader2,
+  Inbox,
+} from "lucide-react"
 import { formatPrice, cn } from "@/lib/utils"
+import { toast } from "sonner"
 
-const pendingItemStatusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  Pending: { label: "Pending", color: "bg-yellow-100 text-yellow-800", icon: Clock },
-  Confirmed: { label: "Confirmed", color: "bg-blue-100 text-blue-800", icon: CheckCircle },
-  Canceled: { label: "Canceled", color: "bg-red-100 text-red-800", icon: XCircle },
-}
+// ===== Pending Items Section =====
 
-function PendingItemRow({ item }: { item: TOrderItem }) {
-  const status = pendingItemStatusConfig[item.status] ?? pendingItemStatusConfig.Pending
-  const StatusIcon = status.icon
+function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: number) => void }) {
+  const badgeColor = "bg-yellow-100 text-yellow-800"
 
   return (
-    <div className="flex items-center gap-3 py-2">
-      <div className="relative h-10 w-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
-        {item.resources?.[0] ? (
-          <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
-        ) : (
-          <Package className="h-5 w-5 text-muted-foreground" />
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{item.sku_name}</p>
-        <p className="text-xs text-muted-foreground">
-          Qty: {item.quantity} &middot; {formatPrice(item.unit_price * item.quantity)}
-        </p>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <Badge variant="secondary" className={cn("font-normal gap-1 text-xs", status.color)}>
-          <StatusIcon className="h-3 w-3" />
-          {status.label}
-        </Badge>
-        <span className="text-xs text-muted-foreground hidden sm:block">
-          {new Date(item.date_created).toLocaleDateString()}
-        </span>
-      </div>
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
+            {item.resources?.[0] ? (
+              <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
+            ) : (
+              <Package className="h-6 w-6 text-muted-foreground" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <ProductLink spuId={item.spu_id}>{item.sku_name}</ProductLink>
+            <p className="text-sm text-muted-foreground">
+              Qty: {item.quantity} x {formatPrice(item.unit_price)}
+            </p>
+            {item.note && (
+              <p className="text-sm text-muted-foreground truncate">{item.note}</p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <Badge variant="secondary" className={cn("font-normal gap-1", badgeColor)}>
+              <Clock className="h-3 w-3" />
+              Awaiting Approval
+            </Badge>
+            <p className="text-sm font-medium">{formatPrice(item.unit_price * item.quantity)}</p>
+            {item.status === "Pending" && (
+              <Button variant="ghost" size="sm" className="text-destructive h-7 px-2" onClick={() => onCancel(item.id)}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
-function PendingItemsSection() {
-  const { data, isLoading } = useListBuyerPending({ limit: 5 })
-  const items = useMemo(() => data?.pages.flatMap((p) => p.data) ?? [], [data])
+function PendingTab() {
+  const {
+    data: pendingData,
+    isLoading: pendingLoading,
+    fetchNextPage: fetchMorePending,
+    hasNextPage: hasMorePending,
+    isFetchingNextPage: fetchingMorePending,
+  } = useListBuyerPending({ limit: 20 })
+
+  const {
+    data: ordersData,
+    isLoading: ordersLoading,
+    fetchNextPage: fetchMoreOrders,
+    hasNextPage: hasMoreOrders,
+    isFetchingNextPage: fetchingMoreOrders,
+  } = useListBuyerConfirmed({ limit: 20 })
+
+  const cancelMutation = useCancelBuyerPending()
+  const [cancelId, setCancelId] = useState<number | null>(null)
+
+  const pendingItems = useMemo(
+    () => pendingData?.pages.flatMap((p) => p.data) ?? [],
+    [pendingData],
+  )
+  const activeOrders = useMemo(
+    () => ordersData?.pages.flatMap((p) => p.data) ?? [],
+    [ordersData],
+  )
+
+  const handleCancel = async () => {
+    if (cancelId === null) return
+    try {
+      await cancelMutation.mutateAsync(cancelId)
+      toast.success("Item cancelled.")
+      setCancelId(null)
+    } catch {
+      toast.error("Failed to cancel item.")
+    }
+  }
+
+  const isLoading = pendingLoading || ordersLoading
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-16 w-16 rounded" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-6 w-24" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  if (pendingItems.length === 0 && activeOrders.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+          <Inbox className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">No pending orders</h3>
+        <p className="text-muted-foreground mb-4">
+          Items awaiting approval and active orders will appear here.
+        </p>
+        <Button asChild>
+          <Link href="/">Start Shopping</Link>
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Pending Items</h2>
-        <Link
-          href="/account/pending-items"
-          className="flex items-center gap-1 text-sm text-primary hover:underline"
-        >
-          View all
-          <ChevronRight className="h-4 w-4" />
-        </Link>
-      </div>
-
-      <Card>
-        <CardContent className="p-4">
-          {isLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 py-2">
-                  <Skeleton className="h-10 w-10 rounded" />
-                  <div className="flex-1 space-y-1">
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                  <Skeleton className="h-5 w-20" />
-                </div>
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="flex items-center gap-3 py-2 text-muted-foreground">
-              <ShoppingBag className="h-5 w-5" />
-              <p className="text-sm">No pending items — your items will appear here after checkout.</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {items.map((item) => (
-                <PendingItemRow key={item.id} item={item} />
-              ))}
+    <div className="space-y-6">
+      {/* Pending Items (awaiting seller approval) */}
+      {pendingItems.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Awaiting Seller Approval</h3>
+          <div className="space-y-3">
+            {pendingItems.map((item) => (
+              <PendingItemCard key={item.id} item={item} onCancel={setCancelId} />
+            ))}
+          </div>
+          {hasMorePending && (
+            <div className="text-center">
+              <Button variant="outline" size="sm" onClick={() => fetchMorePending()} disabled={fetchingMorePending}>
+                {fetchingMorePending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Loading...</> : "Load More"}
+              </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* Active Orders (unpaid / confirmed / shipped) */}
+      {activeOrders.length > 0 && (
+        <div className="space-y-3">
+          {pendingItems.length > 0 && (
+            <h3 className="text-sm font-medium text-muted-foreground">Active Orders</h3>
+          )}
+          <OrderList
+            orders={activeOrders}
+            hasNextPage={hasMoreOrders}
+            isFetchingNextPage={fetchingMoreOrders}
+            onLoadMore={() => fetchMoreOrders()}
+          />
+        </div>
+      )}
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={cancelId !== null} onOpenChange={(open) => { if (!open) setCancelId(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Item</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this item? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelId(null)}>Keep Item</Button>
+            <Button variant="destructive" onClick={handleCancel} disabled={cancelMutation.isPending}>
+              {cancelMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Cancelling...</> : "Cancel Item"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
+// ===== Main Page =====
 
 export default function OrdersPage() {
   const {
-    data: ordersData,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useListBuyerConfirmed({ limit: 10 })
+    data: completedData,
+    isLoading: completedLoading,
+    fetchNextPage: fetchMoreCompleted,
+    hasNextPage: hasMoreCompleted,
+    isFetchingNextPage: fetchingMoreCompleted,
+  } = useListBuyerConfirmed({ limit: 20, payment_status: ["Success"] })
 
-  const orders = useMemo(() => {
-    return ordersData?.pages.flatMap((page) => page.data) ?? []
-  }, [ordersData])
+  const {
+    data: cancelledData,
+    isLoading: cancelledLoading,
+    fetchNextPage: fetchMoreCancelled,
+    hasNextPage: hasMoreCancelled,
+    isFetchingNextPage: fetchingMoreCancelled,
+  } = useListBuyerConfirmed({ limit: 20, payment_status: ["Cancelled", "Failed"] })
 
-  const unpaidOrders = orders.filter((o) => o.payment === null)
-  const activeOrders = orders.filter(
-    (o) => o.status === "Pending" || o.status === "Confirmed" || o.status === "Shipped"
+  const completedOrders = useMemo(
+    () => completedData?.pages.flatMap((p) => p.data) ?? [],
+    [completedData],
   )
-  const completedOrders = orders.filter((o) => o.status === "Delivered")
-  const cancelledOrders = orders.filter((o) => o.status === "Cancelled")
+  const cancelledOrders = useMemo(
+    () => cancelledData?.pages.flatMap((p) => p.data) ?? [],
+    [cancelledData],
+  )
 
   return (
     <div className="space-y-6">
@@ -127,47 +248,37 @@ export default function OrdersPage() {
         <p className="text-muted-foreground">View and track your orders</p>
       </div>
 
-      <PendingItemsSection />
+      <Tabs defaultValue="pending">
+        <TabsList>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
+          <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+        </TabsList>
 
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Orders</h2>
+        <TabsContent value="pending" className="mt-6">
+          <PendingTab />
+        </TabsContent>
 
-        <Tabs defaultValue="all">
-          <TabsList>
-            <TabsTrigger value="all">All ({orders.length})</TabsTrigger>
-            <TabsTrigger value="unpaid">Unpaid ({unpaidOrders.length})</TabsTrigger>
-            <TabsTrigger value="active">Active ({activeOrders.length})</TabsTrigger>
-            <TabsTrigger value="completed">Completed ({completedOrders.length})</TabsTrigger>
-            <TabsTrigger value="cancelled">Cancelled ({cancelledOrders.length})</TabsTrigger>
-          </TabsList>
+        <TabsContent value="completed" className="mt-6">
+          <OrderList
+            orders={completedOrders}
+            isLoading={completedLoading}
+            hasNextPage={hasMoreCompleted}
+            isFetchingNextPage={fetchingMoreCompleted}
+            onLoadMore={() => fetchMoreCompleted()}
+          />
+        </TabsContent>
 
-          <TabsContent value="all" className="mt-6">
-            <OrderList
-              orders={orders}
-              isLoading={isLoading}
-              hasNextPage={hasNextPage}
-              isFetchingNextPage={isFetchingNextPage}
-              onLoadMore={() => fetchNextPage()}
-            />
-          </TabsContent>
-
-          <TabsContent value="unpaid" className="mt-6">
-            <OrderList orders={unpaidOrders} isLoading={isLoading} />
-          </TabsContent>
-
-          <TabsContent value="active" className="mt-6">
-            <OrderList orders={activeOrders} isLoading={isLoading} />
-          </TabsContent>
-
-          <TabsContent value="completed" className="mt-6">
-            <OrderList orders={completedOrders} isLoading={isLoading} />
-          </TabsContent>
-
-          <TabsContent value="cancelled" className="mt-6">
-            <OrderList orders={cancelledOrders} isLoading={isLoading} />
-          </TabsContent>
-        </Tabs>
-      </div>
+        <TabsContent value="cancelled" className="mt-6">
+          <OrderList
+            orders={cancelledOrders}
+            isLoading={cancelledLoading}
+            hasNextPage={hasMoreCancelled}
+            isFetchingNextPage={fetchingMoreCancelled}
+            onLoadMore={() => fetchMoreCancelled()}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

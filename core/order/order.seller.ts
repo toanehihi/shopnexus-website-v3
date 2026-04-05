@@ -15,6 +15,27 @@ export const useListSellerPending = (params: PaginationParams<{
     params
   )
 
+export type TQuoteTransportResult = {
+  product_cost: number
+  product_discount: number
+  transport_cost: number
+  total: number
+}
+
+export const useQuoteTransport = () => {
+  return useMutation({
+    mutationKey: ['order', 'seller', 'pending', 'quote'],
+    mutationFn: (params: {
+      item_ids: number[]
+      transport_option: string
+    }) =>
+      customFetchStandard<TQuoteTransportResult>(`order/seller/pending/quote`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
 export const useConfirmSellerPending = () => {
   const qc = useQueryClient()
   return useMutation({
@@ -55,7 +76,6 @@ export const useRejectSellerPending = () => {
 export const useListSellerConfirmed = (params: PaginationParams<{
   search?: string
   payment_status?: string[]
-  order_status?: string[]
 }>) =>
   useInfiniteQueryPagination<TOrder>(
     ['order', 'seller', 'confirmed'],

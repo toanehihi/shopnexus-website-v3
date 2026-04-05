@@ -56,9 +56,7 @@ export default function StorePage({
 				<div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6">
 					<Store className="h-10 w-10 text-muted-foreground" />
 				</div>
-				<h1 className="text-xl sm:text-2xl font-bold mb-2">
-					Store not found
-				</h1>
+				<h1 className="text-xl sm:text-2xl font-bold mb-2">Store not found</h1>
 				<p className="text-muted-foreground mb-6 text-sm sm:text-base">
 					The store you&apos;re looking for doesn&apos;t exist or has been
 					removed.
@@ -75,7 +73,7 @@ export default function StorePage({
 		{
 			month: "long",
 			year: "numeric",
-		}
+		},
 	)
 
 	return (
@@ -102,9 +100,7 @@ export default function StorePage({
 						<Avatar className="h-20 w-20 sm:h-28 sm:w-28 border-4 border-background shadow-lg">
 							<AvatarImage src={vendor.avatar_url ?? undefined} />
 							<AvatarFallback className="bg-primary/10 text-primary text-2xl sm:text-4xl font-bold">
-								{vendor.name?.charAt(0) ||
-									vendor.username?.charAt(0) ||
-									"S"}
+								{vendor.name?.charAt(0) || vendor.username?.charAt(0) || "S"}
 							</AvatarFallback>
 						</Avatar>
 
@@ -132,10 +128,7 @@ export default function StorePage({
 
 						{/* Actions */}
 						<div className="flex gap-2 sm:gap-3 flex-shrink-0">
-							<Button
-								onClick={handleChatWithSeller}
-								className="gap-2"
-							>
+							<Button onClick={handleChatWithSeller} className="gap-2">
 								<MessageCircle className="h-4 w-4" />
 								Chat with Seller
 							</Button>

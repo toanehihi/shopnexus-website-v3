@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import {
   useListContacts,
   useCreateContact,
@@ -10,52 +10,13 @@ import {
   type Contact,
 } from "@/core/account/contact"
 import { useGetMe, useUpdateMe } from "@/core/account/account"
-import { useGeolocation, formatAccuracy } from "@/lib/geocoding/use-geolocation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  MapPin,
-  Plus,
-  Pencil,
-  Trash2,
-  Home,
-  Building2,
-  Loader2,
-  Star,
-  Phone,
-  User,
-  Navigation,
-} from "lucide-react"
+import { MapPin, Plus } from "lucide-react"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
-
-type ContactFormData = {
-  full_name: string
-  phone: string
-  address: string
-  address_type: "Home" | "Work"
-  latitude: number | null
-  longitude: number | null
-}
+import { AddressesSkeleton } from "./_components/addresses-skeleton"
+import { AddressCard } from "./_components/address-card"
+import { AddressFormDialog, type ContactFormData } from "./_components/address-form-dialog"
+import { DeleteConfirmDialog } from "./_components/delete-confirm-dialog"
 
 const emptyForm: ContactFormData = {
   full_name: "",
@@ -78,32 +39,6 @@ export default function AddressesPage() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Contact | null>(null)
   const [formData, setFormData] = useState<ContactFormData>(emptyForm)
-
-  const {
-    getLocation,
-    isLoading: isLocating,
-    error: geoError,
-    result: geoResult,
-  } = useGeolocation()
-
-  // When geolocation result arrives, fill the form
-  useEffect(() => {
-    if (geoResult) {
-      setFormData((prev) => ({
-        ...prev,
-        address: geoResult.address,
-        latitude: geoResult.latitude,
-        longitude: geoResult.longitude,
-      }))
-    }
-  }, [geoResult])
-
-  // Show geolocation errors as toasts
-  useEffect(() => {
-    if (geoError) {
-      toast.error(geoError)
-    }
-  }, [geoError])
 
   const openAddDialog = () => {
     setEditingContact(null)
@@ -221,325 +156,36 @@ export default function AddressesPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {contacts.map((contact) => {
-            const isDefault = user?.default_contact_id === contact.id
-            const isHome = contact.address_type === AddressType.Home
-            const TypeIcon = isHome ? Home : Building2
-
-            return (
-              <Card
-                key={contact.id}
-                className={cn(isDefault && "border-primary")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="gap-1">
-                        <TypeIcon className="h-3 w-3" />
-                        {isHome ? "Home" : "Work"}
-                      </Badge>
-                      {isDefault && (
-                        <Badge className="gap-1">
-                          <Star className="h-3 w-3" />
-                          Default
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => openEditDialog(contact)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteConfirm(contact)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium">{contact.full_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span>{contact.phone}</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                      <span className="text-muted-foreground">
-                        {contact.address}
-                      </span>
-                    </div>
-                    {contact.latitude != null && contact.longitude != null && (
-                      <div className="flex items-center gap-2">
-                        <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-xs text-muted-foreground">
-                          Coordinates: {contact.latitude.toFixed(6)},{" "}
-                          {contact.longitude.toFixed(6)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {!isDefault && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-4 w-full"
-                      onClick={() => handleSetDefault(contact.id)}
-                      disabled={updateMe.isPending}
-                    >
-                      <Star className="h-4 w-4 mr-1" />
-                      Set as Default
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+          {contacts.map((contact) => (
+            <AddressCard
+              key={contact.id}
+              contact={contact}
+              isDefault={user?.default_contact_id === contact.id}
+              onEdit={openEditDialog}
+              onDelete={setDeleteConfirm}
+              onSetDefault={handleSetDefault}
+              isSettingDefault={updateMe.isPending}
+            />
+          ))}
         </div>
       )}
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingContact ? "Edit Address" : "Add New Address"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingContact
-                ? "Update your delivery address details."
-                : "Add a new delivery address to your account."}
-            </DialogDescription>
-          </DialogHeader>
+      <AddressFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        isEditing={!!editingContact}
+        formData={formData}
+        onFormDataChange={setFormData}
+        onSubmit={handleSubmit}
+        isSubmitting={isSubmitting}
+      />
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="full_name">Full Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="full_name"
-                  placeholder="Enter full name"
-                  className="pl-10"
-                  value={formData.full_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, full_name: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="Enter phone number"
-                  className="pl-10"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full mb-2"
-                onClick={getLocation}
-                disabled={isLocating}
-              >
-                {isLocating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Locating...
-                  </>
-                ) : (
-                  <>
-                    <MapPin className="h-4 w-4 mr-1" />
-                    <Navigation className="h-4 w-4 mr-2" />
-                    Use my location
-                  </>
-                )}
-              </Button>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="address"
-                  placeholder="Enter full address"
-                  className="pl-10"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                />
-              </div>
-              {formData.latitude != null && formData.longitude != null && (
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Navigation className="h-3 w-3" />
-                    Coordinates: {formData.latitude.toFixed(6)},{" "}
-                    {formData.longitude.toFixed(6)}
-                  </p>
-                  {geoResult?.accuracy != null && (
-                    <p className={`text-xs flex items-center gap-1 ${
-                      formatAccuracy(geoResult.accuracy).level === 'good' ? 'text-green-600' :
-                      formatAccuracy(geoResult.accuracy).level === 'ok' ? 'text-yellow-600' :
-                      'text-red-500'
-                    }`}>
-                      📍 Accuracy: {formatAccuracy(geoResult.accuracy).label}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="address_type">Address Type</Label>
-              <Select
-                value={formData.address_type}
-                onValueChange={(value: "Home" | "Work") =>
-                  setFormData({ ...formData, address_type: value })
-                }
-              >
-                <SelectTrigger id="address_type">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Home">
-                    <div className="flex items-center gap-2">
-                      <Home className="h-4 w-4" />
-                      Home
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="Work">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Work
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : editingContact ? (
-                "Save Changes"
-              ) : (
-                "Add Address"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={!!deleteConfirm}
+      <DeleteConfirmDialog
+        contact={deleteConfirm}
         onOpenChange={() => setDeleteConfirm(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Address</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this address? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteConfirm && (
-            <div className="rounded-lg border p-4 space-y-1">
-              <p className="font-medium">{deleteConfirm.full_name}</p>
-              <p className="text-sm text-muted-foreground">
-                {deleteConfirm.address}
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteContact.isPending}
-            >
-              {deleteContact.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-function AddressesSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-4 w-48 mt-1" />
-        </div>
-        <Skeleton className="h-10 w-32" />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex gap-2">
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                </div>
-                <div className="flex gap-1">
-                  <Skeleton className="h-8 w-8" />
-                  <Skeleton className="h-8 w-8" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-4 w-full" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+        onDelete={handleDelete}
+        isDeleting={deleteContact.isPending}
+      />
     </div>
   )
 }

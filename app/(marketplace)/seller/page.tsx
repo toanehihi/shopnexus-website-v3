@@ -387,7 +387,7 @@ export default function SellerDashboardPage() {
               </div>
               <div className="flex gap-2 text-xs">
                 <Link
-                  href="/seller/incoming"
+                  href="/seller/orders"
                   className="text-amber-600 underline hover:text-amber-800"
                 >
                   Incoming items

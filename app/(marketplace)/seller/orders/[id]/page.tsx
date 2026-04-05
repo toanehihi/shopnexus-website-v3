@@ -3,7 +3,9 @@
 import { use } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useGetBuyerOrder, TOrder } from "@/core/order/order.buyer"
+import { TOrder } from "@/core/order/order.buyer"
+import { useGetSellerOrder } from "@/core/order/order.seller"
+import { ProductLink } from "@/components/product/product-link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -37,24 +39,29 @@ function AccountName({ id, fallback = "User" }: { id: string; fallback?: string 
   return <>{data?.name || data?.username || fallback}</>
 }
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType; color: string }> = {
-  Pending: { label: "Pending", variant: "secondary", icon: Clock, color: "text-yellow-600" },
-  Confirmed: { label: "Confirmed", variant: "default", icon: CheckCircle, color: "text-blue-600" },
-  Shipped: { label: "Shipped", variant: "default", icon: Truck, color: "text-purple-600" },
-  Delivered: { label: "Delivered", variant: "outline", icon: Package, color: "text-green-600" },
-  Cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle, color: "text-red-600" },
+function getOrderDisplayStatus(order: TOrder): { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType } {
+  const ps = order.payment?.status
+  const ts = order.transport?.status
+  if (!order.payment) return { label: "Unpaid", variant: "secondary", icon: Clock }
+  if (ps === "Pending") return { label: "Awaiting Payment", variant: "secondary", icon: Clock }
+  if (ps === "Failed") return { label: "Payment Failed", variant: "destructive", icon: XCircle }
+  if (ps === "Cancelled") return { label: "Cancelled", variant: "destructive", icon: XCircle }
+  if (ts === "Delivered") return { label: "Completed", variant: "outline", icon: Package }
+  if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", variant: "default", icon: Truck }
+  if (ts === "Failed" || ts === "Cancelled") return { label: "Delivery Failed", variant: "destructive", icon: XCircle }
+  return { label: "Processing", variant: "default", icon: CheckCircle }
 }
 
-const steps = [
-  { status: "Pending", label: "Order Placed" },
-  { status: "Confirmed", label: "Confirmed" },
-  { status: "Shipped", label: "Shipped" },
-  { status: "Delivered", label: "Delivered" },
+const progressSteps = [
+  { key: "placed", label: "Order Placed" },
+  { key: "paid", label: "Paid" },
+  { key: "shipped", label: "Shipped" },
+  { key: "delivered", label: "Delivered" },
 ]
 
 export default function SellerOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { data: order, isLoading } = useGetBuyerOrder(id)
+  const { data: order, isLoading } = useGetSellerOrder(id)
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -71,9 +78,14 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
     navigator.clipboard.writeText(text)
   }
 
-  const getCurrentStep = (status: string) => {
-    if (status === "Cancelled") return -1
-    return steps.findIndex((s) => s.status === status)
+  const getCurrentStep = (order: TOrder) => {
+    const ps = order.payment?.status
+    const ts = order.transport?.status
+    if (ps === "Cancelled" || ps === "Failed") return -1
+    if (ts === "Delivered") return 3
+    if (ts === "InTransit" || ts === "OutForDelivery") return 2
+    if (ps === "Success") return 1
+    return 0
   }
 
   if (isLoading) {
@@ -111,9 +123,10 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
     )
   }
 
-  const status = statusConfig[order.status] ?? statusConfig.Pending
+  const status = getOrderDisplayStatus(order)
   const StatusIcon = status.icon
-  const currentStep = getCurrentStep(order.status)
+  const currentStep = getCurrentStep(order)
+  const isCancelled = currentStep === -1
 
   return (
     <div className="space-y-6">
@@ -156,7 +169,7 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
       </div>
 
       {/* Progress Tracker */}
-      {order.status !== "Cancelled" && (
+      {!isCancelled && (
         <Card>
           <CardContent className="p-6">
             <div className="flex justify-between relative">
@@ -164,15 +177,15 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               <div className="absolute top-4 left-0 right-0 h-0.5 bg-muted">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+                  style={{ width: `${(currentStep / (progressSteps.length - 1)) * 100}%` }}
                 />
               </div>
 
-              {steps.map((step, index) => {
+              {progressSteps.map((step, index) => {
                 const isCompleted = index <= currentStep
                 const isCurrent = index === currentStep
                 return (
-                  <div key={step.status} className="flex flex-col items-center relative z-10">
+                  <div key={step.key} className="flex flex-col items-center relative z-10">
                     <div
                       className={`h-8 w-8 rounded-full flex items-center justify-center ${
                         isCompleted
@@ -225,19 +238,16 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <Link href={`/product/${item.spu_id}`} className="font-medium truncate text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{item.sku_name}</Link>
-                    <p className="text-sm text-muted-foreground">
-                      SKU: {item.sku_name}
-                    </p>
+                    <ProductLink spuId={item.spu_id} onClick={(e) => e.stopPropagation()}>{item.sku_name}</ProductLink>
+                    {item.note && (
+                      <p className="text-sm text-muted-foreground truncate">
+                        {item.note}
+                      </p>
+                    )}
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-sm">Qty: {item.quantity}</span>
                       <span className="font-medium">{formatPrice(item.unit_price * item.quantity)}</span>
                     </div>
-                    {item.note && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Note: {item.note}
-                      </p>
-                    )}
                   </div>
                 </div>
               ))}
@@ -287,7 +297,7 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
           </Card>
 
           {/* Transport Info */}
-          {order.transport_id && (
+          {order.transport && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -297,7 +307,10 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  ID: {order.transport_id.slice(0, 8)}
+                  ID: {order.transport.id.slice(0, 8)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Status: {order.transport.status}
                 </p>
               </CardContent>
             </Card>
