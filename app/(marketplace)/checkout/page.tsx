@@ -9,6 +9,9 @@ import { useGetCart } from "@/core/order/cart"
 import { useBuyerCheckout } from "@/core/order/order.buyer"
 import { useListContacts, AddressType, type Contact } from "@/core/account/contact"
 import { useGetMe } from "@/core/account/account"
+import { useListServiceOption } from "@/core/common/option"
+import { useListPaymentMethods } from "@/core/account/payment-method"
+import { useGetWalletBalance } from "@/core/account/wallet"
 import { formatPrice } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -18,12 +21,23 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   MapPin,
   Loader2,
   ChevronLeft,
   ShoppingBag,
   ExternalLink,
+  Truck,
+  CreditCard,
+  Wallet,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -35,10 +49,17 @@ export default function CheckoutPage() {
   if (!isAuthenticated) return null
   const { data: contacts, isLoading: contactsLoading } = useListContacts()
   const { data: user } = useGetMe()
+  const { data: transportOptions } = useListServiceOption({ category: "transport" })
+  const { data: paymentOptions } = useListServiceOption({ category: "payment" })
+  const { data: paymentMethods } = useListPaymentMethods()
+  const { data: walletData } = useGetWalletBalance()
 
   const checkoutMutation = useBuyerCheckout()
 
   const [selectedContactId, setSelectedContactId] = useState<string>("")
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
+  const [useWallet, setUseWallet] = useState(false)
+  const [transportSelections, setTransportSelections] = useState<Record<string, string>>({})
 
   // Set default contact when data loads
   useEffect(() => {
@@ -50,26 +71,68 @@ export default function CheckoutPage() {
     }
   }, [contacts, user, selectedContactId])
 
+  // Set default transport option for each cart item
+  useEffect(() => {
+    if (cart && transportOptions && transportOptions.length > 0) {
+      setTransportSelections((prev) => {
+        const updated = { ...prev }
+        for (const item of cart) {
+          if (!updated[item.sku.id]) {
+            updated[item.sku.id] = transportOptions[0].id
+          }
+        }
+        return updated
+      })
+    }
+  }, [cart, transportOptions])
+
+  // Set default payment option
+  useEffect(() => {
+    if (!selectedPaymentOption) {
+      if (paymentMethods && paymentMethods.length > 0) {
+        const defaultMethod = paymentMethods.find((pm) => pm.is_default)
+        if (defaultMethod) {
+          setSelectedPaymentOption(`pm:${defaultMethod.id}`)
+          return
+        }
+      }
+      if (paymentOptions && paymentOptions.length > 0) {
+        setSelectedPaymentOption(paymentOptions[0].id)
+      }
+    }
+  }, [paymentMethods, paymentOptions, selectedPaymentOption])
+
   const selectedContact = useMemo(
     () => contacts?.find((c) => c.id === selectedContactId) ?? null,
     [contacts, selectedContactId]
   )
 
+  const walletBalance = walletData?.balance ?? 0
+
   const handleCheckout = async () => {
     if (!selectedContact || !cart) return
 
     try {
-      await checkoutMutation.mutateAsync({
+      const result = await checkoutMutation.mutateAsync({
         buy_now: false,
+        address: selectedContact.address,
+        payment_option: selectedPaymentOption,
+        use_wallet: useWallet,
         items: cart.map((item) => ({
           sku_id: item.sku.id,
           quantity: item.quantity,
-          address: selectedContact.address,
+          transport_option: transportSelections[item.sku.id] || "",
+          note: undefined,
         })),
       })
 
-      toast.success("Checkout successful! Items are now pending.")
-      router.push("/account/orders")
+      if (result.redirect_url) {
+        toast.success("Redirecting to payment gateway...")
+        window.location.href = result.redirect_url
+      } else {
+        toast.success("Checkout successful! Your order has been placed.")
+        router.push("/account/orders")
+      }
     } catch (error) {
       toast.error("Failed to checkout. Please try again.")
       console.error(error)
@@ -79,6 +142,16 @@ export default function CheckoutPage() {
   const isLoading = cartLoading || contactsLoading
   const itemCount = cart?.reduce((acc, item) => acc + item.quantity, 0) ?? 0
   const subtotal = cart?.reduce((acc, item) => acc + item.sku.price * item.quantity, 0) ?? 0
+
+  // Estimate shipping cost (simple heuristic: count items with transport selected)
+  const estimatedShipping = useMemo(() => {
+    if (!cart || !transportOptions) return 0
+    // We don't have real shipping cost estimates yet, so show 0 and let the server calculate
+    return 0
+  }, [cart, transportOptions])
+
+  const walletDeduction = useWallet ? Math.min(walletBalance, subtotal + estimatedShipping) : 0
+  const estimatedTotal = subtotal + estimatedShipping - walletDeduction
 
   if (isLoading) {
     return <CheckoutPageSkeleton />
@@ -99,7 +172,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const canCheckout = !!selectedContactId
+  const canCheckout = !!selectedContactId && !!selectedPaymentOption
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -191,14 +264,17 @@ export default function CheckoutPage() {
             </CardContent>
           </Card>
 
-          {/* Order Items Review */}
+          {/* Order Items with Transport Selection */}
           <Card>
             <CardHeader>
-              <CardTitle>Items ({itemCount})</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="h-5 w-5" />
+                Items & Shipping ({itemCount})
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               {cart.map((item) => (
-                <div key={item.sku.id} className="flex gap-3">
+                <div key={item.sku.id} className="flex gap-3 pb-4 border-b last:border-b-0 last:pb-0">
                   <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                     {item.resource?.url ? (
                       <Image
@@ -218,8 +294,34 @@ export default function CheckoutPage() {
                       {item.sku.attributes?.map((a) => a.value).join(" / ") || "Product"}
                     </p>
                     <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                    <div className="mt-2">
+                      <Select
+                        value={transportSelections[item.sku.id] || ""}
+                        onValueChange={(value) =>
+                          setTransportSelections((prev) => ({ ...prev, [item.sku.id]: value }))
+                        }
+                      >
+                        <SelectTrigger className="w-48 h-8 text-xs">
+                          <SelectValue placeholder="Select shipping" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {transportOptions && transportOptions.length > 0 ? (
+                            transportOptions.map((opt) => (
+                              <SelectItem key={opt.id} value={opt.id}>
+                                {opt.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <>
+                              <SelectItem value="ghtk_standard">Standard</SelectItem>
+                              <SelectItem value="ghtk_express">Express</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <p className="font-medium">
+                  <p className="font-medium flex-shrink-0">
                     {formatPrice(item.sku.price * item.quantity)}
                   </p>
                 </div>
@@ -227,10 +329,121 @@ export default function CheckoutPage() {
             </CardContent>
           </Card>
 
-          {/* Checkout Button */}
+          {/* Payment Method Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Payment Method
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={selectedPaymentOption}
+                onValueChange={setSelectedPaymentOption}
+                className="space-y-3"
+              >
+                {/* Saved Payment Methods */}
+                {paymentMethods && paymentMethods.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Saved Cards</p>
+                    {paymentMethods.map((pm) => (
+                      <Label
+                        key={pm.id}
+                        htmlFor={`checkout-pm-${pm.id}`}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                          selectedPaymentOption === `pm:${pm.id}` && "border-primary bg-accent/30"
+                        )}
+                      >
+                        <RadioGroupItem value={`pm:${pm.id}`} id={`checkout-pm-${pm.id}`} />
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1">
+                          <span className="font-medium">
+                            {pm.data.brand ?? pm.provider} **** {pm.data.last4}
+                          </span>
+                          {pm.data.exp_month && pm.data.exp_year && (
+                            <p className="text-xs text-muted-foreground">
+                              Expires {String(pm.data.exp_month).padStart(2, "0")}/{pm.data.exp_year}
+                            </p>
+                          )}
+                        </div>
+                        {pm.is_default && (
+                          <Badge variant="secondary" className="text-xs">Default</Badge>
+                        )}
+                      </Label>
+                    ))}
+                  </div>
+                )}
+
+                {/* Service Payment Options (VNPay, SePay, COD, etc.) */}
+                {paymentOptions && paymentOptions.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Other Payment Methods</p>
+                    {paymentOptions.map((option) => (
+                      <Label
+                        key={option.id}
+                        htmlFor={`checkout-so-${option.id}`}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                          selectedPaymentOption === option.id && "border-primary bg-accent/30"
+                        )}
+                      >
+                        <RadioGroupItem value={option.id} id={`checkout-so-${option.id}`} />
+                        <div>
+                          <span className="font-medium">{option.name}</span>
+                          {option.description && (
+                            <p className="text-xs text-muted-foreground">{option.description}</p>
+                          )}
+                        </div>
+                      </Label>
+                    ))}
+                  </div>
+                )}
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
+          {/* Wallet Toggle */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                Wallet
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Label
+                htmlFor="use-wallet"
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors hover:bg-accent/50",
+                  useWallet && "border-primary bg-accent/30"
+                )}
+              >
+                <Checkbox
+                  id="use-wallet"
+                  checked={useWallet}
+                  onCheckedChange={(checked) => setUseWallet(checked === true)}
+                />
+                <div className="flex-1">
+                  <span className="font-medium">Use wallet balance</span>
+                  <p className="text-sm text-muted-foreground">
+                    Available balance: {formatPrice(walletBalance)}
+                  </p>
+                </div>
+                {useWallet && walletDeduction > 0 && (
+                  <span className="text-sm font-medium text-green-600">
+                    -{formatPrice(walletDeduction)}
+                  </span>
+                )}
+              </Label>
+            </CardContent>
+          </Card>
+
+          {/* Checkout Button (mobile) */}
           <Button
             size="lg"
-            className="w-full"
+            className="w-full lg:hidden"
             disabled={!canCheckout || checkoutMutation.isPending}
             onClick={handleCheckout}
           >
@@ -240,7 +453,7 @@ export default function CheckoutPage() {
                 Processing...
               </>
             ) : (
-              "Place Order"
+              `Pay ${formatPrice(estimatedTotal)}`
             )}
           </Button>
         </div>
@@ -298,15 +511,39 @@ export default function CheckoutPage() {
                   <span className="text-muted-foreground">Products ({itemCount} items)</span>
                   <span>{formatPrice(subtotal)}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Shipping and payment will be determined after the seller confirms your items.
-                </p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Estimated shipping</span>
+                  <span>{estimatedShipping > 0 ? formatPrice(estimatedShipping) : "Calculated at confirmation"}</span>
+                </div>
+                {useWallet && walletDeduction > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>Wallet deduction</span>
+                    <span>-{formatPrice(walletDeduction)}</span>
+                  </div>
+                )}
                 <Separator />
                 <div className="flex justify-between font-semibold text-lg">
-                  <span>Subtotal</span>
-                  <span>{formatPrice(subtotal)}</span>
+                  <span>Estimated Total</span>
+                  <span>{formatPrice(estimatedTotal)}</span>
                 </div>
               </div>
+
+              {/* Checkout Button (desktop) */}
+              <Button
+                size="lg"
+                className="w-full hidden lg:flex"
+                disabled={!canCheckout || checkoutMutation.isPending}
+                onClick={handleCheckout}
+              >
+                {checkoutMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  `Pay ${formatPrice(estimatedTotal)}`
+                )}
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -324,6 +561,8 @@ function CheckoutPageSkeleton() {
         <div className="lg:col-span-2 space-y-6">
           <Skeleton className="h-64 rounded-lg" />
           <Skeleton className="h-48 rounded-lg" />
+          <Skeleton className="h-40 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
         </div>
         <div>
           <Skeleton className="h-80 rounded-lg" />

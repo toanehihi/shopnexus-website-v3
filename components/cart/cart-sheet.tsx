@@ -81,7 +81,7 @@ export function CartSheet({ onClose }: CartSheetProps) {
 			) : (
 				<>
 					<ScrollArea className="flex-1 -mx-6 px-6">
-						<div className="space-y-4 py-4 px-4">
+						<div className="space-y-4 p-4">
 							{cart.map((item) => (
 								<div key={item.sku.id} className="flex gap-4">
 									<div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted flex-shrink-0">
@@ -148,8 +148,8 @@ export function CartSheet({ onClose }: CartSheetProps) {
 						</div>
 					</ScrollArea>
 
-					<Separator />
-					<div className="space-y-4 pt-4 px-4">
+					<div className="space-y-4 p-4">
+						<Separator />
 						<div className="flex items-center justify-between">
 							<span className="text-muted-foreground">Subtotal</span>
 							<span className="font-semibold">{formatPrice(total)}</span>

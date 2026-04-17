@@ -34,6 +34,7 @@ export function CategorySelect({
 
 	const { data, isLoading } = useListCategories({
 		search: debouncedSearch || undefined,
+		id: !debouncedSearch && value ? [value] : undefined,
 		limit: 20,
 	})
 
@@ -98,12 +99,20 @@ export function TagSelect({
 
 	const options: SearchableSelectOption[] = useMemo(() => {
 		const tags = data?.pages.flatMap((page) => page.data) ?? []
-		return tags.map((tag) => ({
+		const tagOptions = tags.map((tag) => ({
 			id: tag.id,
 			label: tag.id, // Tag id is typically the tag name
 			description: tag.description || undefined,
 		}))
-	}, [data])
+		// Inject pre-filled values not in fetched results so they display
+		const existingIds = new Set(tagOptions.map((t) => t.id))
+		for (const v of values ?? []) {
+			if (!existingIds.has(v)) {
+				tagOptions.push({ id: v, label: v, description: undefined })
+			}
+		}
+		return tagOptions
+	}, [data, values])
 
 	return (
 		<SearchableSelect

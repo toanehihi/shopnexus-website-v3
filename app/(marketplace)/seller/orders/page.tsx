@@ -1,29 +1,23 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { useDebounceValue } from "usehooks-ts"
+import { useState, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { ProductLink } from "@/components/product/product-link"
 import {
-  useListSellerPending,
+  useListSellerPendingItems,
   useConfirmSellerPending,
   useRejectSellerPending,
   useListSellerConfirmed,
-  useQuoteTransport,
-  TQuoteTransportResult,
 } from "@/core/order/order.seller"
 import { TOrderItem } from "@/core/order/order.buyer"
-import { useListServiceOption } from "@/core/common/option"
 import { useGetAccount } from "@/core/account/account"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -41,7 +35,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Search,
   CheckCircle,
   XCircle,
   Package,
@@ -53,6 +46,7 @@ import {
   ShoppingCart,
   Truck,
   Clock,
+  AlertTriangle,
 } from "lucide-react"
 import { formatPrice, cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -72,13 +66,8 @@ function summarizeOrder(items?: Array<{ sku_name: string }>): string {
 }
 
 function getOrderDisplayStatus(order: { payment?: { status: string } | null; transport?: { status: string } | null }): { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType } {
-  const ps = order.payment?.status
   const ts = order.transport?.status
 
-  if (!order.payment) return { label: "Unpaid", variant: "secondary", icon: Clock }
-  if (ps === "Pending") return { label: "Awaiting Payment", variant: "secondary", icon: Clock }
-  if (ps === "Failed") return { label: "Payment Failed", variant: "destructive", icon: XCircle }
-  if (ps === "Cancelled") return { label: "Cancelled", variant: "destructive", icon: XCircle }
   if (ts === "Delivered") return { label: "Completed", variant: "outline", icon: Package }
   if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", variant: "default", icon: Truck }
   if (ts === "Failed" || ts === "Cancelled") return { label: "Delivery Failed", variant: "destructive", icon: XCircle }
@@ -88,47 +77,26 @@ function getOrderDisplayStatus(order: { payment?: { status: string } | null; tra
 // ===== Incoming Tab =====
 
 function IncomingTab() {
-  const [search, setSearch] = useState("")
-  const [debouncedSearch] = useDebounceValue(search, 300)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
-  const [transportOption, setTransportOption] = useState("")
   const [confirmNote, setConfirmNote] = useState("")
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useListSellerPending({
-      limit: 20,
-      ...(debouncedSearch ? { search: debouncedSearch } : {}),
-    })
-  const { data: transportOptions } = useListServiceOption({ category: "transport" })
+    useListSellerPendingItems({ limit: 20 })
   const confirmMutation = useConfirmSellerPending()
   const rejectMutation = useRejectSellerPending()
-  const quoteMutation = useQuoteTransport()
-  const [quote, setQuote] = useState<TQuoteTransportResult | null>(null)
-
-  // Fetch quote when transport option or selected items change
-  useEffect(() => {
-    if (!showConfirmDialog || !transportOption || selectedIds.size === 0) {
-      setQuote(null)
-      return
-    }
-    quoteMutation.mutateAsync({
-      item_ids: Array.from(selectedIds),
-      transport_option: transportOption,
-    }).then(setQuote).catch(() => setQuote(null))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transportOption, showConfirmDialog])
 
   const items = useMemo(
     () => data?.pages.flatMap((page) => page.data) ?? [],
     [data],
   )
 
+  // Group by buyer + address + transport_option (seller can only confirm items with the same transport_option)
   const grouped = useMemo(() => {
     const map = new Map<string, TOrderItem[]>()
     for (const item of items) {
-      const key = `${item.account_id}::${item.address}`
+      const key = `${item.account_id}::${item.address}::${item.transport_option}`
       const existing = map.get(key) ?? []
       existing.push(item)
       map.set(key, existing)
@@ -153,20 +121,22 @@ function IncomingTab() {
     }
   }
 
+  const selectedItems = useMemo(
+    () => items.filter((i) => selectedIds.has(i.id)),
+    [items, selectedIds],
+  )
+
   const handleConfirm = async () => {
-    if (!transportOption || selectedIds.size === 0) return
+    if (selectedIds.size === 0) return
     try {
       await confirmMutation.mutateAsync({
         item_ids: Array.from(selectedIds),
-        transport_option: transportOption,
         note: confirmNote || undefined,
       })
       toast.success("Items confirmed and order created.")
       setSelectedIds(new Set())
       setShowConfirmDialog(false)
-      setTransportOption("")
       setConfirmNote("")
-      setQuote(null)
     } catch {
       toast.error("Failed to confirm items.")
     }
@@ -176,7 +146,7 @@ function IncomingTab() {
     if (selectedIds.size === 0) return
     try {
       await rejectMutation.mutateAsync({ item_ids: Array.from(selectedIds) })
-      toast.success("Items rejected.")
+      toast.success("Items rejected. Money refunded to buyer's wallet.")
       setSelectedIds(new Set())
       setShowRejectDialog(false)
     } catch {
@@ -186,17 +156,6 @@ function IncomingTab() {
 
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by SKU name, ID, or buyer..."
-          className="pl-10 max-w-md"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
       {/* Bulk Actions */}
       {items.length > 0 && (
         <div className="flex items-center gap-4">
@@ -245,18 +204,18 @@ function IncomingTab() {
             <Inbox className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No incoming items</h3>
             <p className="text-muted-foreground">
-              {search ? "Try a different search term" : "New items from buyers will appear here"}
+              New paid items from buyers will appear here
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
           {grouped.map(([key, groupItems]) => {
-            const [buyerId, address] = key.split("::")
+            const [buyerId, address, transportOption] = key.split("::")
             return (
               <Card key={key}>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-4 pb-3 border-b">
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b flex-wrap">
                     <Badge variant="outline">
                       <AccountName id={buyerId} fallback="Buyer" />
                     </Badge>
@@ -264,6 +223,10 @@ function IncomingTab() {
                       <MapPin className="h-3 w-3" />
                       {address}
                     </div>
+                    <Badge variant="secondary" className="gap-1">
+                      <Truck className="h-3 w-3" />
+                      {transportOption}
+                    </Badge>
                   </div>
 
                   <div className="space-y-3">
@@ -294,10 +257,20 @@ function IncomingTab() {
                           {item.note && (
                             <p className="text-sm text-muted-foreground truncate">{item.note}</p>
                           )}
-                          <div className="flex items-center gap-4 mt-1 text-sm">
+                          <div className="flex items-center gap-4 mt-1 text-sm flex-wrap">
                             <span>Qty: {item.quantity}</span>
                             <span className="font-medium">{formatPrice(item.unit_price)}/ea</span>
                             <span className="font-medium">{formatPrice(item.unit_price * item.quantity)} total</span>
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                            <Badge variant="outline" className="text-xs gap-1">
+                              <CheckCircle className="h-3 w-3 text-green-600" />
+                              Paid
+                            </Badge>
+                            <span className="flex items-center gap-1">
+                              <Truck className="h-3 w-3" />
+                              {item.transport_option} &middot; Est. {formatPrice(item.transport_cost_estimate)}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -324,14 +297,14 @@ function IncomingTab() {
           <DialogHeader>
             <DialogTitle>Confirm Items</DialogTitle>
             <DialogDescription>
-              Confirm {selectedIds.size} selected item{selectedIds.size !== 1 ? "s" : ""} and create an order. Choose a transport option.
+              Confirm {selectedIds.size} selected item{selectedIds.size !== 1 ? "s" : ""} and create an order.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Quote Summary */}
+            {/* Selected Items Summary */}
             <div className="rounded-lg border bg-muted/50 p-3 space-y-1.5">
-              {items.filter((i) => selectedIds.has(i.id)).map((item) => (
+              {selectedItems.map((item) => (
                 <div key={item.id} className="flex justify-between gap-4 text-sm">
                   <span className="min-w-0 truncate">{item.sku_name} x{item.quantity}</span>
                   <span className="font-medium flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</span>
@@ -341,73 +314,25 @@ function IncomingTab() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>
                   {formatPrice(
-                    items
-                      .filter((i) => selectedIds.has(i.id))
-                      .reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
-                  )}
-                </span>
-              </div>
-              {quote && quote.product_discount > 0 && (
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>Discount</span>
-                  <span>-{formatPrice(quote.product_discount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Shipping</span>
-                <span>
-                  {quoteMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin inline" />
-                  ) : quote ? (
-                    formatPrice(quote.transport_cost)
-                  ) : (
-                    "Select transport"
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between pt-1.5 border-t font-semibold">
-                <span>Total</span>
-                <span>
-                  {quoteMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin inline" />
-                  ) : quote ? (
-                    formatPrice(quote.total)
-                  ) : (
-                    formatPrice(
-                      items
-                        .filter((i) => selectedIds.has(i.id))
-                        .reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
-                    )
+                    selectedItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
                   )}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Transport Option</Label>
-              {transportOptions && transportOptions.length > 0 ? (
-                <RadioGroup value={transportOption} onValueChange={setTransportOption} className="space-y-2">
-                  {transportOptions.map((option) => (
-                    <Label
-                      key={option.id}
-                      htmlFor={`transport-${option.id}`}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
-                        transportOption === option.id && "border-primary bg-accent/30",
-                      )}
-                    >
-                      <RadioGroupItem value={option.id} id={`transport-${option.id}`} />
-                      <div>
-                        <span className="font-medium">{option.name}</span>
-                        {option.description && <p className="text-sm text-muted-foreground">{option.description}</p>}
-                      </div>
-                    </Label>
-                  ))}
-                </RadioGroup>
-              ) : (
-                <p className="text-sm text-muted-foreground">No transport options available.</p>
-              )}
-            </div>
+            {/* Buyer's transport option (read-only) */}
+            {selectedItems.length > 0 && (
+              <div className="rounded-lg border p-3">
+                <Label className="text-sm text-muted-foreground">Transport Option (chosen by buyer)</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{selectedItems[0].transport_option}</span>
+                  <span className="text-sm text-muted-foreground">
+                    &middot; Est. {formatPrice(selectedItems.reduce((sum, i) => sum + i.transport_cost_estimate, 0))}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="confirm-note">Note (optional)</Label>
@@ -422,7 +347,7 @@ function IncomingTab() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancel</Button>
-            <Button onClick={handleConfirm} disabled={!transportOption || confirmMutation.isPending}>
+            <Button onClick={handleConfirm} disabled={selectedIds.size === 0 || confirmMutation.isPending}>
               {confirmMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming...</>
               ) : (
@@ -442,6 +367,12 @@ function IncomingTab() {
               Are you sure you want to reject {selectedIds.size} selected item{selectedIds.size !== 1 ? "s" : ""}? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 p-3 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Ti&#7873;n s&#7869; &#273;&#432;&#7907;c ho&#224;n v&#224;o v&#237; ng&#432;&#7901;i mua (Money will be refunded to buyer&apos;s wallet)
+            </p>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRejectDialog(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleReject} disabled={rejectMutation.isPending}>
@@ -461,12 +392,8 @@ function IncomingTab() {
 // ===== Confirmed Tab =====
 
 function ConfirmedTab() {
-  const [search, setSearch] = useState("")
-  const [debouncedSearch] = useDebounceValue(search, 300)
-
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListSellerConfirmed({
     limit: 20,
-    ...(debouncedSearch ? { search: debouncedSearch } : {}),
   })
 
   const orders = useMemo(
@@ -481,17 +408,6 @@ function ConfirmedTab() {
 
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by order ID..."
-          className="pl-10 max-w-md"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
       {/* Orders List */}
       {isLoading ? (
         <div className="space-y-4">
@@ -516,7 +432,7 @@ function ConfirmedTab() {
             <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No orders found</h3>
             <p className="text-muted-foreground">
-              {search ? "Try a different search term" : "Orders will appear here when items are confirmed"}
+              Orders will appear here when items are confirmed
             </p>
           </CardContent>
         </Card>
@@ -537,9 +453,6 @@ function ConfirmedTab() {
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
                         </Badge>
-                        {order.payment === null && (
-                          <Badge variant="destructive" className="font-normal">Unpaid</Badge>
-                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         #{order.id.slice(0, 8)} &middot; {formatDate(order.date_created)}

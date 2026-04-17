@@ -4,10 +4,11 @@ import { useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
-  useListBuyerPending,
+  useListBuyerPendingItems,
   useListBuyerConfirmed,
   useCancelBuyerPending,
   TOrderItem,
+  TOrder,
 } from "@/core/order/order.buyer"
 import { ProductLink } from "@/components/product/product-link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -36,6 +37,7 @@ import { toast } from "sonner"
 // ===== Pending Items Section =====
 
 function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: number) => void }) {
+  const badgeLabel = "Awaiting Seller"
   const badgeColor = "bg-yellow-100 text-yellow-800"
 
   return (
@@ -61,10 +63,10 @@ function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: 
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <Badge variant="secondary" className={cn("font-normal gap-1", badgeColor)}>
               <Clock className="h-3 w-3" />
-              Awaiting Approval
+              {badgeLabel}
             </Badge>
             <p className="text-sm font-medium">{formatPrice(item.unit_price * item.quantity)}</p>
-            {item.status === "Pending" && (
+            {!item.order_id && !item.date_cancelled && (
               <Button variant="ghost" size="sm" className="text-destructive h-7 px-2" onClick={() => onCancel(item.id)}>
                 Cancel
               </Button>
@@ -83,7 +85,7 @@ function PendingTab() {
     fetchNextPage: fetchMorePending,
     hasNextPage: hasMorePending,
     isFetchingNextPage: fetchingMorePending,
-  } = useListBuyerPending({ limit: 20 })
+  } = useListBuyerPendingItems({ limit: 20 })
 
   const {
     data: ordersData,
@@ -215,30 +217,36 @@ function PendingTab() {
 
 // ===== Main Page =====
 
+function isCompletedOrder(order: TOrder): boolean {
+  return order.transport?.status === "Delivered"
+}
+
+function isCancelledOrder(order: TOrder): boolean {
+  const ps = order.payment?.status
+  const ts = order.transport?.status
+  return ps === "Cancelled" || ps === "Failed" || ts === "Failed" || ts === "Cancelled"
+}
+
 export default function OrdersPage() {
   const {
-    data: completedData,
-    isLoading: completedLoading,
-    fetchNextPage: fetchMoreCompleted,
-    hasNextPage: hasMoreCompleted,
-    isFetchingNextPage: fetchingMoreCompleted,
-  } = useListBuyerConfirmed({ limit: 20, payment_status: ["Success"] })
+    data: allOrdersData,
+    isLoading: ordersLoading,
+    fetchNextPage: fetchMoreOrders,
+    hasNextPage: hasMoreOrders,
+    isFetchingNextPage: fetchingMoreOrders,
+  } = useListBuyerConfirmed({ limit: 50 })
 
-  const {
-    data: cancelledData,
-    isLoading: cancelledLoading,
-    fetchNextPage: fetchMoreCancelled,
-    hasNextPage: hasMoreCancelled,
-    isFetchingNextPage: fetchingMoreCancelled,
-  } = useListBuyerConfirmed({ limit: 20, payment_status: ["Cancelled", "Failed"] })
-
+  const allOrders = useMemo(
+    () => allOrdersData?.pages.flatMap((p) => p.data) ?? [],
+    [allOrdersData],
+  )
   const completedOrders = useMemo(
-    () => completedData?.pages.flatMap((p) => p.data) ?? [],
-    [completedData],
+    () => allOrders.filter(isCompletedOrder),
+    [allOrders],
   )
   const cancelledOrders = useMemo(
-    () => cancelledData?.pages.flatMap((p) => p.data) ?? [],
-    [cancelledData],
+    () => allOrders.filter(isCancelledOrder),
+    [allOrders],
   )
 
   return (
@@ -262,20 +270,20 @@ export default function OrdersPage() {
         <TabsContent value="completed" className="mt-6">
           <OrderList
             orders={completedOrders}
-            isLoading={completedLoading}
-            hasNextPage={hasMoreCompleted}
-            isFetchingNextPage={fetchingMoreCompleted}
-            onLoadMore={() => fetchMoreCompleted()}
+            isLoading={ordersLoading}
+            hasNextPage={hasMoreOrders}
+            isFetchingNextPage={fetchingMoreOrders}
+            onLoadMore={() => fetchMoreOrders()}
           />
         </TabsContent>
 
         <TabsContent value="cancelled" className="mt-6">
           <OrderList
             orders={cancelledOrders}
-            isLoading={cancelledLoading}
-            hasNextPage={hasMoreCancelled}
-            isFetchingNextPage={fetchingMoreCancelled}
-            onLoadMore={() => fetchMoreCancelled()}
+            isLoading={ordersLoading}
+            hasNextPage={hasMoreOrders}
+            isFetchingNextPage={fetchingMoreOrders}
+            onLoadMore={() => fetchMoreOrders()}
           />
         </TabsContent>
       </Tabs>

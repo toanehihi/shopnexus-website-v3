@@ -1,29 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { TOrder, usePayBuyerOrders } from "@/core/order/order.buyer"
-import { useListPaymentMethods } from "@/core/account/payment-method"
-import { useListServiceOption } from "@/core/common/option"
+import { TOrder } from "@/core/order/order.buyer"
 import { formatPrice } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
 import { WriteReviewDialog } from "@/components/product/write-review-dialog"
-import { Package, ChevronRight, ShoppingBag, Loader2, CreditCard, Star } from "lucide-react"
+import { Package, ChevronRight, ShoppingBag, Loader2, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { toast } from "sonner"
 
 function summarizeOrder(items?: Array<{ sku_name: string }>): string {
   if (!items?.length) return "Order"
@@ -36,8 +24,6 @@ function getOrderDisplayStatus(order: TOrder): { label: string; color: string } 
   const ps = order.payment?.status
   const ts = order.transport?.status
 
-  if (!order.payment) return { label: "Unpaid", color: "bg-yellow-100 text-yellow-800" }
-  if (ps === "Pending") return { label: "Awaiting Payment", color: "bg-yellow-100 text-yellow-800" }
   if (ps === "Failed") return { label: "Payment Failed", color: "bg-red-100 text-red-800" }
   if (ps === "Cancelled") return { label: "Cancelled", color: "bg-red-100 text-red-800" }
   if (ts === "Delivered") return { label: "Completed", color: "bg-green-100 text-green-800" }
@@ -59,21 +45,7 @@ export function OrderList({
   isFetchingNextPage?: boolean
   onLoadMore?: () => void
 }) {
-  const payMutation = usePayBuyerOrders()
-  const [payingOrderId, setPayingOrderId] = useState<string | null>(null)
   const [reviewingOrder, setReviewingOrder] = useState<{ orderId: string; spuId: string } | null>(null)
-  const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
-  const { data: paymentMethods } = useListPaymentMethods()
-  const { data: serviceOptions } = useListServiceOption({ category: "payment" })
-
-  useEffect(() => {
-    if (paymentMethods && paymentMethods.length > 0) {
-      const defaultMethod = paymentMethods.find((pm) => pm.is_default)
-      if (defaultMethod) {
-        setSelectedPaymentOption(`pm:${defaultMethod.id}`)
-      }
-    }
-  }, [paymentMethods])
 
   if (isLoading) {
     return (
@@ -187,26 +159,6 @@ export function OrderList({
                 <p className="font-semibold">{formatPrice(order.total)}</p>
               </div>
               <div className="flex gap-2">
-                {order.payment === null && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => setPayingOrderId(order.id)}
-                  >
-                    <CreditCard className="h-4 w-4 mr-1" />
-                    Pay
-                  </Button>
-                )}
-                {order.payment?.status === "Pending" && order.payment?.data?.redirect_url && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => window.open(order.payment!.data.redirect_url, "_blank")}
-                  >
-                    <CreditCard className="h-4 w-4 mr-1" />
-                    Complete Payment
-                  </Button>
-                )}
                 {order.payment?.status === "Success" && order.transport?.status === "Delivered" && order.items[0] && (
                   <Button
                     variant="outline"
@@ -247,126 +199,6 @@ export function OrderList({
           </Button>
         </div>
       )}
-
-      {/* Payment Method Selection Dialog */}
-      <Dialog
-        open={payingOrderId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPayingOrderId(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Select Payment Method</DialogTitle>
-          </DialogHeader>
-
-          <RadioGroup
-            value={selectedPaymentOption}
-            onValueChange={setSelectedPaymentOption}
-            className="space-y-2"
-          >
-            {/* Saved Cards */}
-            {paymentMethods && paymentMethods.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Saved Cards</p>
-                {paymentMethods.map((pm) => (
-                  <Label
-                    key={pm.id}
-                    htmlFor={`pm-${pm.id}`}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
-                      selectedPaymentOption === `pm:${pm.id}` && "border-primary bg-accent/30"
-                    )}
-                  >
-                    <RadioGroupItem value={`pm:${pm.id}`} id={`pm-${pm.id}`} />
-                    <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    <div className="flex-1">
-                      <span className="font-medium">
-                        {pm.data.brand ?? pm.provider} **** {pm.data.last4}
-                      </span>
-                      {pm.data.exp_month && pm.data.exp_year && (
-                        <p className="text-xs text-muted-foreground">
-                          Expires {String(pm.data.exp_month).padStart(2, "0")}/{pm.data.exp_year}
-                        </p>
-                      )}
-                    </div>
-                    {pm.is_default && (
-                      <Badge variant="secondary" className="text-xs">Default</Badge>
-                    )}
-                  </Label>
-                ))}
-              </div>
-            )}
-
-            {/* Other Payment Methods */}
-            {serviceOptions && serviceOptions.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Other Payment Methods</p>
-                {serviceOptions.map((option) => (
-                  <Label
-                    key={option.id}
-                    htmlFor={`so-${option.id}`}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
-                      selectedPaymentOption === option.id && "border-primary bg-accent/30"
-                    )}
-                  >
-                    <RadioGroupItem value={option.id} id={`so-${option.id}`} />
-                    <div>
-                      <span className="font-medium">{option.name}</span>
-                      {option.description && (
-                        <p className="text-xs text-muted-foreground">{option.description}</p>
-                      )}
-                    </div>
-                  </Label>
-                ))}
-              </div>
-            )}
-          </RadioGroup>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPayingOrderId(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={!selectedPaymentOption || payMutation.isPending}
-              onClick={async () => {
-                if (!payingOrderId) return
-                try {
-                  const result = await payMutation.mutateAsync({
-                    order_ids: [payingOrderId],
-                    payment_option: selectedPaymentOption,
-                  })
-                  setPayingOrderId(null)
-                  if (result.redirect_url) {
-                    window.open(result.redirect_url, "_blank")
-                    toast.success("Payment page opened in a new tab.")
-                  } else {
-                    toast.success("Payment initiated successfully.")
-                  }
-                } catch {
-                  toast.error("Failed to initiate payment.")
-                }
-              }}
-            >
-              {payMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Pay Now
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Write Review Dialog */}
       {reviewingOrder && (

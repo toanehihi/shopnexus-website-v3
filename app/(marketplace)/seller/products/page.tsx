@@ -45,6 +45,7 @@ import {
 	Package,
 	Star,
 	Loader2,
+	Video,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 
@@ -80,12 +81,20 @@ export default function SellerProductsPage() {
 					<h1 className="text-2xl font-bold">Products</h1>
 					<p className="text-muted-foreground">Manage your product catalog</p>
 				</div>
-				<Button asChild>
-					<Link href="/seller/products/new">
-						<Plus className="h-4 w-4 mr-2" />
-						Add Product
-					</Link>
-				</Button>
+				<div className="flex gap-2">
+					<Button variant="outline" asChild>
+						<Link href="/seller/products/new/from-video">
+							<Video className="h-4 w-4 mr-2" />
+							Create from Video
+						</Link>
+					</Button>
+					<Button asChild>
+						<Link href="/seller/products/new">
+							<Plus className="h-4 w-4 mr-2" />
+							Add Product
+						</Link>
+					</Button>
+				</div>
 			</div>
 
 			{/* Filters */}

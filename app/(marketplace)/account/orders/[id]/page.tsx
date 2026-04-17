@@ -1,21 +1,19 @@
 "use client"
 
-import { use, useState, useEffect } from "react"
+import { use, useState } from "react"
 import Link from "next/link"
-import { useGetBuyerOrder, usePayBuyerOrders } from "@/core/order/order.buyer"
-import { useListPaymentMethods } from "@/core/account/payment-method"
+import { useGetBuyerOrder } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, CreditCard, MapPin, XCircle } from "lucide-react"
+import { ChevronLeft, MapPin, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { toast } from "sonner"
 import { OrderDetailSkeleton } from "./_components/order-detail-skeleton"
-import { PaymentMethodDialog } from "./_components/payment-method-dialog"
 import { OrderProgress } from "./_components/order-progress"
 import { OrderItemsCard } from "./_components/order-items-card"
 import { OrderSummaryCard } from "./_components/order-summary-card"
 import { PaymentInfoCard } from "./_components/payment-info-card"
+import { CreateRefundDialog } from "@/components/order/create-refund-dialog"
 
 function summarizeOrder(items?: Array<{ sku_name: string }>): string {
 	if (!items?.length) return "Order"
@@ -29,8 +27,6 @@ import type { TOrder } from "@/core/order/order.buyer"
 function getOrderDisplayStatus(order: TOrder): { label: string; color: string } {
 	const ps = order.payment?.status
 	const ts = order.transport?.status
-	if (!order.payment) return { label: "Unpaid", color: "bg-yellow-100 text-yellow-800" }
-	if (ps === "Pending") return { label: "Awaiting Payment", color: "bg-yellow-100 text-yellow-800" }
 	if (ps === "Failed") return { label: "Payment Failed", color: "bg-red-100 text-red-800" }
 	if (ps === "Cancelled") return { label: "Cancelled", color: "bg-red-100 text-red-800" }
 	if (ts === "Delivered") return { label: "Completed", color: "bg-green-100 text-green-800" }
@@ -46,19 +42,7 @@ export default function OrderDetailPage({
 }) {
 	const { id } = use(params)
 	const { data: order, isLoading, error } = useGetBuyerOrder(id)
-	const payMutation = usePayBuyerOrders()
-	const [showPayDialog, setShowPayDialog] = useState(false)
-	const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
-	const { data: paymentMethods } = useListPaymentMethods()
-
-	useEffect(() => {
-		if (paymentMethods && paymentMethods.length > 0) {
-			const defaultMethod = paymentMethods.find((pm) => pm.is_default)
-			if (defaultMethod) {
-				setSelectedPaymentOption(`pm:${defaultMethod.id}`)
-			}
-		}
-	}, [paymentMethods])
+	const [showRefundDialog, setShowRefundDialog] = useState(false)
 
 	if (isLoading) {
 		return <OrderDetailSkeleton />
@@ -81,25 +65,6 @@ export default function OrderDetailPage({
 	const displayStatus = getOrderDisplayStatus(order)
 	const isCancelled = order.payment?.status === "Cancelled" || order.payment?.status === "Failed"
 
-	const handlePay = async () => {
-		if (!selectedPaymentOption) return
-		try {
-			const result = await payMutation.mutateAsync({
-				order_ids: [order.id],
-				payment_option: selectedPaymentOption,
-			})
-			setShowPayDialog(false)
-			if (result.redirect_url) {
-				window.open(result.redirect_url, "_blank")
-				toast.success("Payment page opened in a new tab.")
-			} else {
-				toast.success("Payment initiated successfully.")
-			}
-		} catch {
-			toast.error("Failed to initiate payment.")
-		}
-	}
-
 	return (
 		<div className="space-y-6">
 			{/* Header */}
@@ -116,65 +81,13 @@ export default function OrderDetailPage({
 						{new Date(order.date_created).toLocaleDateString()}
 					</p>
 				</div>
-				<div className="flex items-center gap-2">
-					{order.payment === null && (
-						<Badge variant="destructive" className="font-normal">
-							Unpaid
-						</Badge>
-					)}
-					<Badge
-						variant="secondary"
-						className={cn("font-normal", displayStatus.color)}
-					>
-						{displayStatus.label}
-					</Badge>
-				</div>
+				<Badge
+					variant="secondary"
+					className={cn("font-normal", displayStatus.color)}
+				>
+					{displayStatus.label}
+				</Badge>
 			</div>
-
-			{/* Awaiting Payment Banner */}
-			{order.payment === null && (
-				<Card className="border-orange-200 bg-orange-50">
-					<CardContent className="p-6 flex items-center justify-between gap-4">
-						<div className="flex items-center gap-3">
-							<CreditCard className="h-8 w-8 text-orange-600" />
-							<div>
-								<p className="font-medium text-orange-900">Awaiting Payment</p>
-								<p className="text-sm text-orange-700">
-									This order needs to be paid before it can be processed.
-								</p>
-							</div>
-						</div>
-						<Button onClick={() => setShowPayDialog(true)}>
-							<CreditCard className="h-4 w-4 mr-2" />
-							Pay Now
-						</Button>
-					</CardContent>
-				</Card>
-			)}
-			{order.payment?.status === "Pending" &&
-				order.payment?.data?.redirect_url && (
-					<Card className="border-blue-200 bg-blue-50">
-						<CardContent className="p-6 flex items-center justify-between gap-4">
-							<div className="flex items-center gap-3">
-								<CreditCard className="h-8 w-8 text-blue-600" />
-								<div>
-									<p className="font-medium text-blue-900">Payment Pending</p>
-									<p className="text-sm text-blue-700">
-										Complete your payment on the provider&apos;s page.
-									</p>
-								</div>
-							</div>
-							<Button
-								onClick={() =>
-									window.open(order.payment!.data.redirect_url, "_blank")
-								}
-							>
-								<CreditCard className="h-4 w-4 mr-2" />
-								Complete Payment
-							</Button>
-						</CardContent>
-					</Card>
-				)}
 
 			{/* Order Progress */}
 			{!isCancelled && <OrderProgress paymentStatus={order.payment?.status} transportStatus={order.transport?.status} />}
@@ -225,29 +138,9 @@ export default function OrderDetailPage({
 
 					{/* Actions */}
 					<div className="space-y-2">
-						{order.payment === null && (
-							<Button className="w-full" onClick={() => setShowPayDialog(true)}>
-								<CreditCard className="h-4 w-4 mr-2" />
-								Pay Now
-							</Button>
-						)}
-						{order.payment?.status === "Pending" &&
-							order.payment?.data?.redirect_url && (
-								<Button
-									className="w-full"
-									onClick={() =>
-										window.open(order.payment!.data.redirect_url, "_blank")
-									}
-								>
-									<CreditCard className="h-4 w-4 mr-2" />
-									Complete Payment
-								</Button>
-							)}
 						{order.payment?.status === "Success" && order.transport?.status === "Delivered" && (
-							<Button className="w-full" asChild>
-								<Link href={`/account/orders/${order.id}/refund`}>
-									Request Refund
-								</Link>
+							<Button className="w-full" onClick={() => setShowRefundDialog(true)}>
+								Request Refund
 							</Button>
 						)}
 						<Button variant="outline" className="w-full" asChild>
@@ -257,16 +150,10 @@ export default function OrderDetailPage({
 				</div>
 			</div>
 
-			{/* Payment Method Selection Dialog */}
-			<PaymentMethodDialog
-				open={showPayDialog}
-				onOpenChange={(open) => {
-					if (!open) setShowPayDialog(false)
-				}}
-				selectedPaymentOption={selectedPaymentOption}
-				onSelectedPaymentOptionChange={setSelectedPaymentOption}
-				onPay={handlePay}
-				isPaying={payMutation.isPending}
+			<CreateRefundDialog
+				orderId={order.id}
+				open={showRefundDialog}
+				onOpenChange={setShowRefundDialog}
 			/>
 		</div>
 	)

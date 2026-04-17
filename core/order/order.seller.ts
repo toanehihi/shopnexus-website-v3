@@ -6,43 +6,19 @@ import { TOrder, TOrderItem } from "./order.buyer"
 
 // ===== Hooks =====
 
-export const useListSellerPending = (params: PaginationParams<{
-  search?: string
-}>) =>
+export const useListSellerPendingItems = (params: PaginationParams) =>
   useInfiniteQueryPagination<TOrderItem>(
-    ['order', 'seller', 'pending'],
+    ['order', 'seller', 'pending-items'],
     'order/seller/pending',
     params
   )
 
-export type TQuoteTransportResult = {
-  product_cost: number
-  product_discount: number
-  transport_cost: number
-  total: number
-}
-
-export const useQuoteTransport = () => {
-  return useMutation({
-    mutationKey: ['order', 'seller', 'pending', 'quote'],
-    mutationFn: (params: {
-      item_ids: number[]
-      transport_option: string
-    }) =>
-      customFetchStandard<TQuoteTransportResult>(`order/seller/pending/quote`, {
-        method: 'POST',
-        body: JSON.stringify(params),
-      }),
-  })
-}
-
 export const useConfirmSellerPending = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationKey: ['order', 'seller', 'pending', 'confirm'],
+    mutationKey: ['order', 'seller', 'pending-items', 'confirm'],
     mutationFn: (params: {
       item_ids: number[]
-      transport_option: string
       note?: string
     }) =>
       customFetchStandard<TOrder>(`order/seller/pending/confirm`, {
@@ -50,7 +26,7 @@ export const useConfirmSellerPending = () => {
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'pending'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'pending-items'] })
       await qc.invalidateQueries({ queryKey: ['order', 'seller', 'confirmed'] })
     },
   })
@@ -59,7 +35,7 @@ export const useConfirmSellerPending = () => {
 export const useRejectSellerPending = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationKey: ['order', 'seller', 'pending', 'reject'],
+    mutationKey: ['order', 'seller', 'pending-items', 'reject'],
     mutationFn: (params: {
       item_ids: number[]
     }) =>
@@ -68,15 +44,12 @@ export const useRejectSellerPending = () => {
         body: JSON.stringify(params),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'pending'] })
+      await qc.invalidateQueries({ queryKey: ['order', 'seller', 'pending-items'] })
     },
   })
 }
 
-export const useListSellerConfirmed = (params: PaginationParams<{
-  search?: string
-  payment_status?: string[]
-}>) =>
+export const useListSellerConfirmed = (params: PaginationParams) =>
   useInfiniteQueryPagination<TOrder>(
     ['order', 'seller', 'confirmed'],
     'order/seller/confirmed',
@@ -90,9 +63,9 @@ export const useGetSellerOrder = (id: string) =>
     enabled: !!id,
   })
 
-export const useGetSellerOverview = (params?: { search?: string }) => {
-  const pending = useListSellerPending({ limit: 20, ...params })
-  const confirmed = useListSellerConfirmed({ limit: 20, ...params })
+export const useGetSellerOverview = () => {
+  const pending = useListSellerPendingItems({ limit: 20 })
+  const confirmed = useListSellerConfirmed({ limit: 20 })
   return {
     incomingItems: pending.data?.pages.flatMap(p => p.data) ?? [],
     orders: confirmed.data?.pages.flatMap(p => p.data) ?? [],
