@@ -22,6 +22,8 @@ export type TRefund = {
   status: Status
   reason: string
   address: string | null
+  item_ids: number[] | null
+  amount: number
   date_created: string
   resources: Resource[]
 }
