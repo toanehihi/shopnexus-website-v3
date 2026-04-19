@@ -172,7 +172,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const canCheckout = !!selectedContactId && !!selectedPaymentOption
+  const canCheckout = !!selectedContactId && !!selectedPaymentOption && cart.length > 0
 
   return (
     <div className="container mx-auto px-4 py-8">

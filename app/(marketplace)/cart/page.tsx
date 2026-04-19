@@ -32,8 +32,6 @@ export default function CartPage() {
 
   const subtotal = cart?.reduce((acc, item) => acc + item.sku.price * item.quantity, 0) ?? 0
   const itemCount = cart?.reduce((acc, item) => acc + item.quantity, 0) ?? 0
-  const shipping = subtotal > 50 ? 0 : 5.99
-  const total = subtotal + shipping
 
   const handleUpdateQuantity = (skuId: string, delta: number) => {
     updateCart.mutate({ sku_id: skuId, delta_quantity: delta })
@@ -199,22 +197,16 @@ export default function CartPage() {
                     <span className="text-muted-foreground">Subtotal</span>
                     <span>{formatPrice(subtotal)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Shipping</span>
-                    <span>{shipping === 0 ? "Free" : formatPrice(shipping)}</span>
-                  </div>
-                  {shipping > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Add {formatPrice(50 - subtotal)} more for free shipping
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Shipping calculated at checkout
+                  </p>
                 </div>
 
                 <Separator />
 
                 <div className="flex justify-between font-semibold text-lg">
-                  <span>Total</span>
-                  <span>{formatPrice(total)}</span>
+                  <span>Subtotal</span>
+                  <span>{formatPrice(subtotal)}</span>
                 </div>
 
                 <Button size="lg" className="w-full" asChild>

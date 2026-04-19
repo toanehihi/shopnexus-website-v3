@@ -38,12 +38,15 @@ export type TTransport = {
 }
 
 export type TPayment = {
-  id: string
+  id: number
   account_id: string
   option: string
   payment_method_id?: string
   status: string
   amount: number
+  buyer_currency?: string
+  seller_currency?: string
+  exchange_rate?: number
   data: Record<string, any>
   date_created: string
   date_paid: string | null

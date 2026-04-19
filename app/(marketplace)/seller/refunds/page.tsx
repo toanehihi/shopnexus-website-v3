@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useListRefundsSeller, useConfirmRefundSeller, useCancelRefundSeller, TRefund, RefundMethod } from "@/core/order/refund.seller"
+import { useListRefundsSeller, useConfirmRefundSeller, TRefund, RefundMethod } from "@/core/order/refund.seller"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +22,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -53,14 +52,13 @@ export default function SellerRefundsPage() {
   const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
   const [selectedRefund, setSelectedRefund] = useState<TRefund | null>(null)
-  const [actionType, setActionType] = useState<"approve" | "reject" | null>(null)
+  const [actionType, setActionType] = useState<"approve" | null>(null)
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListRefundsSeller({
     limit: 20,
     ...(activeTab !== "all" ? { status: activeTab } : {}),
   })
   const confirmMutation = useConfirmRefundSeller()
-  const cancelMutation = useCancelRefundSeller()
 
   const refunds = data?.pages.flatMap((page) => page.data) ?? []
 
@@ -70,13 +68,9 @@ export default function SellerRefundsPage() {
   )
 
   const handleAction = async () => {
-    if (!selectedRefund) return
+    if (!selectedRefund || actionType !== "approve") return
 
-    if (actionType === "approve") {
-      await confirmMutation.mutateAsync({ id: selectedRefund.id })
-    } else if (actionType === "reject") {
-      await cancelMutation.mutateAsync({ id: selectedRefund.id })
-    }
+    await confirmMutation.mutateAsync({ id: selectedRefund.id })
 
     setSelectedRefund(null)
     setActionType(null)
@@ -227,7 +221,6 @@ export default function SellerRefundsPage() {
 
                     <div className="flex items-center gap-2">
                       {statusStr === "Pending" && (
-                        <>
                           <Button
                             size="sm"
                             onClick={() => {
@@ -238,18 +231,6 @@ export default function SellerRefundsPage() {
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Approve
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedRefund(refund)
-                              setActionType("reject")
-                            }}
-                          >
-                            <XCircle className="h-4 w-4 mr-2" />
-                            Reject
-                          </Button>
-                        </>
                       )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -299,14 +280,9 @@ export default function SellerRefundsPage() {
       <Dialog open={!!selectedRefund && !!actionType} onOpenChange={() => { setSelectedRefund(null); setActionType(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {actionType === "approve" ? "Approve Refund" : "Reject Refund"}
-            </DialogTitle>
+            <DialogTitle>Approve Refund</DialogTitle>
             <DialogDescription>
-              {actionType === "approve"
-                ? `Are you sure you want to approve refund #${selectedRefund?.id.slice(0, 8)}? This will initiate the refund process.`
-                : `Are you sure you want to reject refund #${selectedRefund?.id.slice(0, 8)}? This action cannot be undone.`
-              }
+              Are you sure you want to approve refund #{selectedRefund?.id.slice(0, 8)}? This will initiate the refund process.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -314,24 +290,18 @@ export default function SellerRefundsPage() {
               Cancel
             </Button>
             <Button
-              variant={actionType === "reject" ? "destructive" : "default"}
               onClick={handleAction}
-              disabled={confirmMutation.isPending || cancelMutation.isPending}
+              disabled={confirmMutation.isPending}
             >
-              {(confirmMutation.isPending || cancelMutation.isPending) ? (
+              {confirmMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Processing...
                 </>
-              ) : actionType === "approve" ? (
+              ) : (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Approve Refund
-                </>
-              ) : (
-                <>
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject Refund
                 </>
               )}
             </Button>

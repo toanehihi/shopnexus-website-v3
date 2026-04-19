@@ -1,12 +1,13 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { Clock, Check, Truck, Package } from "lucide-react"
+import { Clock, Check, Truck, Package, Loader } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const steps = [
   { key: "placed", label: "Order Placed", icon: Clock },
   { key: "paid", label: "Paid", icon: Check },
+  { key: "processing", label: "Processing", icon: Loader },
   { key: "shipped", label: "Shipped", icon: Truck },
   { key: "delivered", label: "Delivered", icon: Package },
 ]
@@ -19,8 +20,9 @@ interface OrderProgressProps {
 export function OrderProgress({ paymentStatus, transportStatus }: OrderProgressProps) {
   let currentStepIndex = 0
   if (paymentStatus === "Success") currentStepIndex = 1
-  if (transportStatus === "InTransit" || transportStatus === "OutForDelivery") currentStepIndex = 2
-  if (transportStatus === "Delivered") currentStepIndex = 3
+  if (transportStatus === "LabelCreated") currentStepIndex = 2
+  if (transportStatus === "InTransit" || transportStatus === "OutForDelivery") currentStepIndex = 3
+  if (transportStatus === "Delivered") currentStepIndex = 4
 
   return (
     <Card>

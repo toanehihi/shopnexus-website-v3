@@ -37,40 +37,6 @@ export const useListRefundsSeller = (params: PaginationParams<{
     params
   )
 
-export const useUpdateRefundSeller = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (params: {
-      id: string
-      method?: string
-      address?: string | null
-      reason?: string | null
-      resource_ids: string[]
-    }) =>
-      customFetchStandard<TRefund>(`order/seller/refund`, {
-        method: 'PATCH',
-        body: JSON.stringify(params),
-      }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'refund'] })
-    },
-  })
-}
-
-export const useCancelRefundSeller = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (params: { id: string }) =>
-      customFetchStandard<void>(`order/seller/refund`, {
-        method: 'DELETE',
-        body: JSON.stringify(params),
-      }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'refund'] })
-    },
-  })
-}
-
 export const useConfirmRefundSeller = () => {
   const qc = useQueryClient()
   return useMutation({

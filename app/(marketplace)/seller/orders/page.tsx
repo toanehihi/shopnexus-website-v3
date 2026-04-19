@@ -113,12 +113,18 @@ function IncomingTab() {
     })
   }
 
-  const selectAll = () => {
-    if (selectedIds.size === items.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(items.map((i) => i.id)))
-    }
+  const selectAllInGroup = (groupItems: TOrderItem[]) => {
+    const groupIds = groupItems.map((i) => i.id)
+    const allSelected = groupIds.every((id) => selectedIds.has(id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        for (const id of groupIds) next.delete(id)
+      } else {
+        for (const id of groupIds) next.add(id)
+      }
+      return next
+    })
   }
 
   const selectedItems = useMemo(
@@ -157,26 +163,19 @@ function IncomingTab() {
   return (
     <div className="space-y-4">
       {/* Bulk Actions */}
-      {items.length > 0 && (
+      {selectedIds.size > 0 && (
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" onClick={selectAll}>
-            {selectedIds.size === items.length ? "Deselect All" : "Select All"}
+          <span className="text-sm text-muted-foreground">
+            {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button size="sm" onClick={() => setShowConfirmDialog(true)}>
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Confirm Selected
           </Button>
-          {selectedIds.size > 0 && (
-            <>
-              <span className="text-sm text-muted-foreground">
-                {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
-              </span>
-              <Button size="sm" onClick={() => setShowConfirmDialog(true)}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Confirm Selected
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowRejectDialog(true)}>
-                <XCircle className="h-4 w-4 mr-2" />
-                Reject Selected
-              </Button>
-            </>
-          )}
+          <Button size="sm" variant="outline" onClick={() => setShowRejectDialog(true)}>
+            <XCircle className="h-4 w-4 mr-2" />
+            Reject Selected
+          </Button>
         </div>
       )}
 
@@ -227,6 +226,14 @@ function IncomingTab() {
                       <Truck className="h-3 w-3" />
                       {transportOption}
                     </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => selectAllInGroup(groupItems)}
+                    >
+                      {groupItems.every((i) => selectedIds.has(i.id)) ? "Deselect All" : "Select All"}
+                    </Button>
                   </div>
 
                   <div className="space-y-3">
@@ -307,14 +314,14 @@ function IncomingTab() {
               {selectedItems.map((item) => (
                 <div key={item.id} className="flex justify-between gap-4 text-sm">
                   <span className="min-w-0 truncate">{item.sku_name} x{item.quantity}</span>
-                  <span className="font-medium flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</span>
+                  <span className="font-medium flex-shrink-0">{formatPrice(item.paid_amount)}</span>
                 </div>
               ))}
               <div className="flex justify-between pt-1.5 border-t text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
+                <span className="text-muted-foreground">Subtotal (paid)</span>
                 <span>
                   {formatPrice(
-                    selectedItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
+                    selectedItems.reduce((sum, i) => sum + i.paid_amount, 0)
                   )}
                 </span>
               </div>
