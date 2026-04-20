@@ -9,13 +9,16 @@ import {
 	useListProductCardsRecommended,
 	useGetVendorStats,
 } from "@/core/catalog/product.customer"
-import { useGetAccount } from "@/core/account/account"
+import { useGetAccount, useGetMe } from "@/core/account/account"
 import { useAddFavorite, useRemoveFavorite } from "@/core/account/favorite"
 import { useListContacts } from "@/core/account/contact"
 import { useUpdateCart } from "@/core/order/cart"
 import { useBuyerCheckout } from "@/core/order/order.buyer"
+import { useListServiceOption } from "@/core/common/option"
+import { useListPaymentMethods } from "@/core/account/payment-method"
+import { useGetWalletBalance } from "@/core/account/wallet"
 import { formatSoldCount } from "@/lib/utils"
-import { formatPriceInline } from "@/lib/money"
+import { formatMoney, formatPriceInline } from "@/lib/money"
 import { Price } from "@/components/ui/price"
 import { useExchangeRates, usePreferredCurrency } from "@/core/common/currency"
 import { Button } from "@/components/ui/button"
@@ -30,6 +33,15 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -84,6 +96,13 @@ export default function ProductDetailPage({
 	const addFavorite = useAddFavorite()
 	const removeFavorite = useRemoveFavorite()
 	const { data: contacts } = useListContacts()
+	const { data: me } = useGetMe()
+	const { data: transportOptions } = useListServiceOption({
+		category: "transport",
+	})
+	const { data: paymentOptions } = useListServiceOption({ category: "payment" })
+	const { data: paymentMethods } = useListPaymentMethods()
+	const { data: walletData } = useGetWalletBalance()
 	const preferred = usePreferredCurrency()
 	const { data: rateData } = useExchangeRates()
 
@@ -97,6 +116,10 @@ export default function ProductDetailPage({
 	const [isWishlisted, setIsWishlisted] = useState(false)
 	const [isBuyNowOpen, setIsBuyNowOpen] = useState(false)
 	const [isBuyNowProcessing, setIsBuyNowProcessing] = useState(false)
+	const [buyNowContactId, setBuyNowContactId] = useState<string>("")
+	const [buyNowTransportOption, setBuyNowTransportOption] = useState<string>("")
+	const [buyNowPaymentOption, setBuyNowPaymentOption] = useState<string>("")
+	const [buyNowUseWallet, setBuyNowUseWallet] = useState(false)
 
 	// Extract all unique attribute names and their possible values
 	const attributeOptions = useMemo(() => {
@@ -283,6 +306,45 @@ export default function ProductDetailPage({
 		}
 	}
 
+	const selectedBuyNowContact = useMemo(
+		() => contacts?.find((c) => c.id === buyNowContactId) ?? null,
+		[contacts, buyNowContactId],
+	)
+	const walletBalance = walletData?.balance ?? 0
+
+	// Seed Buy Now selections when source data loads
+	useEffect(() => {
+		if (!buyNowContactId && contacts && contacts.length > 0) {
+			const preferred = me?.default_contact_id
+				? contacts.find((c) => c.id === me.default_contact_id)
+				: null
+			setBuyNowContactId(preferred?.id ?? contacts[0].id)
+		}
+	}, [contacts, me, buyNowContactId])
+
+	useEffect(() => {
+		if (
+			!buyNowTransportOption &&
+			transportOptions &&
+			transportOptions.length > 0
+		) {
+			setBuyNowTransportOption(transportOptions[0].id)
+		}
+	}, [transportOptions, buyNowTransportOption])
+
+	useEffect(() => {
+		if (buyNowPaymentOption) return
+		const defaultMethod =
+			paymentMethods?.find((pm) => pm.is_default) ?? paymentMethods?.[0]
+		if (defaultMethod) {
+			setBuyNowPaymentOption(`pm:${defaultMethod.id}`)
+			return
+		}
+		if (paymentOptions && paymentOptions.length > 0) {
+			setBuyNowPaymentOption(paymentOptions[0].id)
+		}
+	}, [paymentMethods, paymentOptions, buyNowPaymentOption])
+
 	const handleBuyNow = () => {
 		if (!selectedSku) return
 		setIsBuyNowOpen(true)
@@ -290,27 +352,41 @@ export default function ProductDetailPage({
 
 	const handleConfirmBuyNow = async () => {
 		if (!selectedSku) return
-		const defaultContact =
-			contacts?.find((c: any) => c.is_default) || contacts?.[0]
-		if (!defaultContact) {
+		if (!selectedBuyNowContact) {
 			setIsBuyNowOpen(false)
 			toast.error("Please add a shipping address first")
 			router.push("/account/contacts")
 			return
 		}
+		if (!buyNowTransportOption) {
+			toast.error("Please select a shipping option")
+			return
+		}
+		if (!buyNowPaymentOption) {
+			toast.error("Please select a payment method")
+			return
+		}
 		setIsBuyNowProcessing(true)
 		try {
-			await checkout.mutateAsync({
+			const result = await checkout.mutateAsync({
 				buy_now: true,
+				address: selectedBuyNowContact.address,
+				payment_option: buyNowPaymentOption,
+				use_wallet: buyNowUseWallet,
 				items: [
 					{
 						sku_id: selectedSku.id,
 						quantity,
-						address: defaultContact.address,
+						transport_option: buyNowTransportOption,
 					},
 				],
 			})
 			setIsBuyNowOpen(false)
+			if (result.redirect_url) {
+				toast.success("Redirecting to payment gateway...")
+				window.location.href = result.redirect_url
+				return
+			}
 			toast.success("Order placed successfully!", {
 				description: `${product?.name} x${quantity} - ${formatPriceInline(
 					selectedSku.price * quantity,
@@ -1047,7 +1123,7 @@ export default function ProductDetailPage({
 					if (!isBuyNowProcessing) setIsBuyNowOpen(open)
 				}}
 			>
-				<DialogContent className="sm:max-w-md">
+				<DialogContent className="sm:max-w-xl">
 					<DialogHeader>
 						<DialogTitle>Confirm Purchase</DialogTitle>
 						<DialogDescription>
@@ -1079,8 +1155,122 @@ export default function ProductDetailPage({
 												{selectedSku.attributes.map((a) => a.value).join(" / ")}
 											</p>
 										)}
+									{quantity > 1 && (
+										<p className="text-xs text-muted-foreground mt-0.5">
+											Quantity: {quantity}
+										</p>
+									)}
 								</div>
 							</div>
+
+							<Separator />
+
+							{/* Ship to */}
+							<div className="space-y-1.5">
+								<Label className="text-xs text-muted-foreground">Ship to</Label>
+								{contacts && contacts.length > 0 ? (
+									<Select
+										value={buyNowContactId}
+										onValueChange={setBuyNowContactId}
+										disabled={contacts.length === 1}
+									>
+										<SelectTrigger className="h-9 text-sm">
+											<SelectValue placeholder="Select address" />
+										</SelectTrigger>
+										<SelectContent>
+											{contacts.map((c) => (
+												<SelectItem key={c.id} value={c.id}>
+													<span className="truncate">
+														{c.full_name} — {c.address}
+													</span>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								) : (
+									<Link
+										href="/account/contacts"
+										className="text-sm text-primary underline underline-offset-2"
+									>
+										Add a shipping address →
+									</Link>
+								)}
+							</div>
+
+							{/* Shipping */}
+							<div className="space-y-1.5">
+								<Label className="text-xs text-muted-foreground">
+									Shipping
+								</Label>
+								<Select
+									value={buyNowTransportOption}
+									onValueChange={setBuyNowTransportOption}
+								>
+									<SelectTrigger className="h-9 text-sm">
+										<SelectValue placeholder="Select shipping" />
+									</SelectTrigger>
+									<SelectContent>
+										{transportOptions && transportOptions.length > 0 ? (
+											transportOptions.map((opt) => (
+												<SelectItem key={opt.id} value={opt.id}>
+													{opt.name}
+												</SelectItem>
+											))
+										) : (
+											<SelectItem value="" disabled>
+												No shipping options available
+											</SelectItem>
+										)}
+									</SelectContent>
+								</Select>
+							</div>
+
+							{/* Payment */}
+							<div className="space-y-1.5">
+								<Label className="text-xs text-muted-foreground">Payment</Label>
+								<Select
+									value={buyNowPaymentOption}
+									onValueChange={setBuyNowPaymentOption}
+								>
+									<SelectTrigger className="h-9 text-sm">
+										<SelectValue placeholder="Select payment method" />
+									</SelectTrigger>
+									<SelectContent>
+										{paymentMethods?.map((pm) => (
+											<SelectItem key={pm.id} value={`pm:${pm.id}`}>
+												{pm.data.brand ?? pm.provider} **** {pm.data.last4}
+											</SelectItem>
+										))}
+										{paymentOptions?.map((opt) => (
+											<SelectItem key={opt.id} value={opt.id}>
+												{opt.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+
+							{/* Wallet */}
+							{walletBalance > 0 && (
+								<div className="flex items-center justify-between rounded-lg border p-2.5">
+									<div className="flex items-center gap-2">
+										<Label
+											htmlFor="buy-now-use-wallet"
+											className="text-sm font-normal cursor-pointer"
+										>
+											Use wallet
+										</Label>
+										<span className="text-xs text-muted-foreground">
+											({formatMoney(walletBalance, product?.currency ?? "VND")} available)
+										</span>
+									</div>
+									<Switch
+										id="buy-now-use-wallet"
+										checked={buyNowUseWallet}
+										onCheckedChange={setBuyNowUseWallet}
+									/>
+								</div>
+							)}
 
 							<Separator />
 
@@ -1093,10 +1283,6 @@ export default function ProductDetailPage({
 										currency={product?.currency ?? "VND"}
 										emphasis="preferred"
 									/>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-muted-foreground">Quantity</span>
-									<span>x{quantity}</span>
 								</div>
 								{discount > 0 && (
 									<div className="flex justify-between text-green-600">
@@ -1136,7 +1322,15 @@ export default function ProductDetailPage({
 						>
 							Cancel
 						</Button>
-						<Button onClick={handleConfirmBuyNow} disabled={isBuyNowProcessing}>
+						<Button
+							onClick={handleConfirmBuyNow}
+							disabled={
+								isBuyNowProcessing ||
+								!selectedBuyNowContact ||
+								!buyNowTransportOption ||
+								!buyNowPaymentOption
+							}
+						>
 							{isBuyNowProcessing ? (
 								<>
 									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
