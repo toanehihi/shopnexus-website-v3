@@ -25,7 +25,7 @@ export const useGetCart = () => {
   return useQuery({
     queryKey: ['account', 'cart'],
     queryFn: async () => customFetchStandard<Cart>('order/cart'),
-    enabled: isAuthenticated,
+    enabled: !!isAuthenticated,
   })
 }
 

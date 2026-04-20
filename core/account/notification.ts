@@ -90,7 +90,7 @@ export const useUnreadCount = () => {
   return useQuery({
     queryKey: ['notification', 'unread'],
     queryFn: async () => customFetchStandard<{ count: number }>('account/notification/unread-count'),
-    enabled: isAuthenticated,
+    enabled: !!isAuthenticated,
     // No polling — SSE pushes invalidation via useEventStream
   })
 }

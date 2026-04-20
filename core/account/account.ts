@@ -55,7 +55,7 @@ export const useGetMe = () => {
   return useQuery({
     queryKey: ['account', 'me'],
     queryFn: async () => customFetchStandard<AccountProfile>('account/me'),
-    enabled: isAuthenticated,
+    enabled: !!isAuthenticated,
   })
 }
 

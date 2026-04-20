@@ -1,124 +1,88 @@
 import { useMutation } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { useEffect, useSyncExternalStore } from 'react'
-import { getQueryClient } from '@/lib/queryclient/query-client'
+import { useEffect, useState } from 'react'
+import {
+  clearAuthTokens,
+  getAccessToken,
+  saveAuthTokens,
+  subscribeAuthChange,
+} from '@/lib/queryclient/auth-storage'
 import { customFetchStandard } from '@/lib/queryclient/custom-fetch'
+import { getQueryClient } from '@/lib/queryclient/query-client'
 
-// ===== Auth State =====
+// ===== Auth state hooks =====
 
-const AUTH_CHANGE = 'auth-change'
+// Returns `undefined` during the hydration render (before localStorage is read),
+// then `boolean` thereafter. Callers passing this to `enabled:` must coerce
+// with `!!` so TanStack Query's default of `true` doesn't fire user-scoped
+// queries before auth state is known.
+export function useIsAuthenticated(): boolean | undefined {
+  const [token, setToken] = useState<string | null | undefined>(undefined)
 
-function notifyAuthChange() {
-  globalThis?.dispatchEvent?.(new Event(AUTH_CHANGE))
+  useEffect(() => {
+    setToken(getAccessToken())
+    return subscribeAuthChange(() => setToken(getAccessToken()))
+  }, [])
+
+  return token === undefined ? undefined : !!token
 }
 
-function getToken() {
-  return globalThis?.localStorage?.getItem?.('token') ?? null
-}
-
-function subscribeToken(callback: () => void) {
-  // Cross-tab: StorageEvent fires when another tab changes localStorage
-  const onStorage = (e: StorageEvent) => { if (e.key === 'token') callback() }
-  // Same-tab: custom event fired by saveAuthTokens / removeAuthTokens
-  const onAuth = () => callback()
-  window.addEventListener('storage', onStorage)
-  window.addEventListener(AUTH_CHANGE, onAuth)
-  return () => {
-    window.removeEventListener('storage', onStorage)
-    window.removeEventListener(AUTH_CHANGE, onAuth)
-  }
-}
-
-export function useIsAuthenticated(): boolean {
-  const token = useSyncExternalStore(subscribeToken, getToken, () => null)
-  return !!token?.length
-}
-
-export function useRequireAuth() {
+export function useRequireAuth(): boolean | undefined {
   const isAuthenticated = useIsAuthenticated()
   const router = useRouter()
+
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace('/login')
-    }
+    if (isAuthenticated === false) router.replace('/login')
   }, [isAuthenticated, router])
+
   return isAuthenticated
 }
 
-// ===== Helpers =====
+// ===== Auth mutations =====
 
-const saveAuthTokens = (data: { access_token: string; refresh_token: string }) => {
-  // TODO: save to httpOnly cookie instead
-  globalThis?.localStorage?.setItem?.('token', data.access_token)
-  globalThis?.localStorage?.setItem?.('refresh_token', data.refresh_token)
-  notifyAuthChange()
-}
+type AuthCredResponse = { access_token: string; refresh_token: string }
 
-const removeAuthTokens = () => {
-  globalThis?.localStorage?.removeItem?.('token')
-  globalThis?.localStorage?.removeItem?.('refresh_token')
-  notifyAuthChange()
-}
-
-// ===== Hooks =====
 export const useRegisterBasic = () =>
   useMutation({
-    mutationFn: async (params: {
+    mutationFn: (params: {
       username?: string | null
       email?: string | null
       phone?: string | null
       password: string
-    }) => customFetchStandard<{
-      access_token: string
-      refresh_token: string
-    }>('account/auth/register/basic', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
+    }) =>
+      customFetchStandard<AuthCredResponse>('account/auth/register/basic', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
     onSuccess: saveAuthTokens,
   })
 
 export const useLoginBasic = () =>
   useMutation({
-    mutationFn: async (params: {
-      id: string
-      password: string
-    }) => customFetchStandard<{
-      access_token: string
-      refresh_token: string
-    }>('account/auth/login/basic', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
+    mutationFn: (params: { id: string; password: string }) =>
+      customFetchStandard<AuthCredResponse>('account/auth/login/basic', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
     onSuccess: saveAuthTokens,
   })
 
 export const useRefreshToken = () =>
   useMutation({
-    mutationFn: async (params: {
-      refresh_token: string
-    }) => customFetchStandard<{
-      access_token: string
-      refresh_token: string
-    }>('account/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
+    mutationFn: (params: { refresh_token: string }) =>
+      customFetchStandard<AuthCredResponse>('account/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
     onSuccess: saveAuthTokens,
   })
 
 export const useSignOut = () =>
   useMutation({
     mutationFn: async () => {
-      removeAuthTokens()
-
-      const queryClient = getQueryClient()
-      await queryClient.setQueryData(['account', 'me'], null)
-      return Promise.resolve()
+      clearAuthTokens()
+      getQueryClient().setQueryData(['account', 'me'], null)
     },
-    onSuccess: async () => {
-      await getQueryClient().invalidateQueries({ queryKey: ['account', 'me'] })
-    },
+    onSuccess: () =>
+      getQueryClient().invalidateQueries({ queryKey: ['account', 'me'] }),
   })
-
-
