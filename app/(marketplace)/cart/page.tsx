@@ -4,7 +4,9 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRequireAuth } from "@/core/account/auth"
 import { useGetCart, useUpdateCart, useClearCart } from "@/core/order/cart"
-import { formatPrice } from "@/lib/utils"
+import { Price } from "@/components/ui/price"
+import { useExchangeRates, usePreferredCurrency } from "@/core/common/currency"
+import { convertMoney, formatMoney } from "@/lib/money"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -29,9 +31,17 @@ export default function CartPage() {
   if (!isAuthenticated) return null
   const updateCart = useUpdateCart()
   const clearCart = useClearCart()
+  const preferred = usePreferredCurrency()
+  const { data: rateData } = useExchangeRates()
 
-  const subtotal = cart?.reduce((acc, item) => acc + item.sku.price * item.quantity, 0) ?? 0
-  const itemCount = cart?.reduce((acc, item) => acc + item.quantity, 0) ?? 0
+  const items = cart ?? []
+  const cartGroups = items.reduce<Record<string, number>>((acc, i) => {
+    const c = i.currency
+    acc[c] = (acc[c] ?? 0) + i.sku.price * i.quantity
+    return acc
+  }, {})
+  const cartCurrencies = Object.keys(cartGroups)
+  const itemCount = items.reduce((acc, item) => acc + item.quantity, 0)
 
   const handleUpdateQuantity = (skuId: string, delta: number) => {
     updateCart.mutate({ sku_id: skuId, delta_quantity: delta })
@@ -121,12 +131,22 @@ export default function CartPage() {
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold">
-                              {formatPrice(item.sku.price * item.quantity)}
-                            </p>
+                            <Price
+                              amount={item.sku.price * item.quantity}
+                              currency={item.currency}
+                              emphasis="preferred"
+                              hideConverted
+                              className="font-semibold"
+                            />
                             {item.quantity > 1 && (
                               <p className="text-sm text-muted-foreground">
-                                {formatPrice(item.sku.price)} each
+                                <Price
+                                  amount={item.sku.price}
+                                  currency={item.currency}
+                                  emphasis="preferred"
+                                  hideConverted
+                                />{" "}
+                                each
                               </p>
                             )}
                           </div>
@@ -193,9 +213,32 @@ export default function CartPage() {
 
                 {/* Totals */}
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between items-start text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>{formatPrice(subtotal)}</span>
+                    <div className="flex flex-col items-end gap-1">
+                      {cartCurrencies.map((c) => (
+                        <Price
+                          key={c}
+                          amount={cartGroups[c]}
+                          currency={c}
+                          emphasis="preferred"
+                        />
+                      ))}
+                      {cartCurrencies.length > 1 && rateData && (
+                        <span className="text-xs text-muted-foreground">
+                          Grand total ≈{" "}
+                          {formatMoney(
+                            cartCurrencies.reduce(
+                              (sum, c) =>
+                                sum +
+                                convertMoney(cartGroups[c], c, preferred, rateData.rates),
+                              0,
+                            ),
+                            preferred,
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Shipping calculated at checkout
@@ -204,9 +247,33 @@ export default function CartPage() {
 
                 <Separator />
 
-                <div className="flex justify-between font-semibold text-lg">
+                <div className="flex justify-between items-start font-semibold text-lg">
                   <span>Subtotal</span>
-                  <span>{formatPrice(subtotal)}</span>
+                  <div className="flex flex-col items-end gap-1">
+                    {cartCurrencies.map((c) => (
+                      <Price
+                        key={c}
+                        amount={cartGroups[c]}
+                        currency={c}
+                        emphasis="preferred"
+                        className="font-semibold"
+                      />
+                    ))}
+                    {cartCurrencies.length > 1 && rateData && (
+                      <span className="text-xs text-muted-foreground font-normal">
+                        Grand total ≈{" "}
+                        {formatMoney(
+                          cartCurrencies.reduce(
+                            (sum, c) =>
+                              sum +
+                              convertMoney(cartGroups[c], c, preferred, rateData.rates),
+                            0,
+                          ),
+                          preferred,
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <Button size="lg" className="w-full" asChild>
