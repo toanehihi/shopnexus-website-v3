@@ -14,7 +14,10 @@ import { useAddFavorite, useRemoveFavorite } from "@/core/account/favorite"
 import { useListContacts } from "@/core/account/contact"
 import { useUpdateCart } from "@/core/order/cart"
 import { useBuyerCheckout } from "@/core/order/order.buyer"
-import { formatPrice, formatSoldCount } from "@/lib/utils"
+import { formatSoldCount } from "@/lib/utils"
+import { formatPriceInline } from "@/lib/money"
+import { Price } from "@/components/ui/price"
+import { useExchangeRates, usePreferredCurrency } from "@/core/common/currency"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -81,6 +84,8 @@ export default function ProductDetailPage({
 	const addFavorite = useAddFavorite()
 	const removeFavorite = useRemoveFavorite()
 	const { data: contacts } = useListContacts()
+	const preferred = usePreferredCurrency()
+	const { data: rateData } = useExchangeRates()
 
 	const [selectedAttributes, setSelectedAttributes] =
 		useState<SelectedAttributes>({})
@@ -307,7 +312,12 @@ export default function ProductDetailPage({
 			})
 			setIsBuyNowOpen(false)
 			toast.success("Order placed successfully!", {
-				description: `${product?.name} x${quantity} - ${formatPrice(selectedSku.price * quantity, product?.currency)}`,
+				description: `${product?.name} x${quantity} - ${formatPriceInline(
+					selectedSku.price * quantity,
+					product?.currency ?? "VND",
+					preferred,
+					rateData?.rates,
+				)}`,
 			})
 			router.push("/account/orders")
 		} catch (err: any) {
@@ -511,28 +521,53 @@ export default function ProductDetailPage({
 									discount > 0 && "text-red-600",
 								)}
 							>
-								{selectedSku
-									? formatPrice(selectedSku.price, product?.currency)
-									: priceRange
-										? `${formatPrice(priceRange.min, product?.currency)} – ${formatPrice(priceRange.max, product?.currency)}`
-										: "N/A"}
+								{selectedSku ? (
+									<Price
+										amount={selectedSku.price}
+										currency={product?.currency ?? "VND"}
+										emphasis="preferred"
+									/>
+								) : priceRange ? (
+									<span className="flex items-center gap-1">
+										<Price
+											amount={priceRange.min}
+											currency={product?.currency ?? "VND"}
+											emphasis="preferred"
+										/>
+										<span>–</span>
+										<Price
+											amount={priceRange.max}
+											currency={product?.currency ?? "VND"}
+											emphasis="preferred"
+										/>
+									</span>
+								) : (
+									"N/A"
+								)}
 							</span>
 							{selectedSku &&
 								selectedSku.original_price > selectedSku.price && (
-									<span className="text-base sm:text-xl text-muted-foreground line-through">
-										{formatPrice(selectedSku.original_price, product?.currency)}
-									</span>
+									<Price
+										amount={selectedSku.original_price}
+										currency={product?.currency ?? "VND"}
+										emphasis="preferred"
+										hideConverted
+										className="text-base sm:text-xl text-muted-foreground line-through"
+									/>
 								)}
 						</div>
 						<div className="flex items-center gap-3 flex-wrap">
 							{discount > 0 && (
-								<p className="text-xs sm:text-sm text-green-600 font-medium">
+								<p className="text-xs sm:text-sm text-green-600 font-medium inline-flex items-center gap-1">
 									You save{" "}
-									{formatPrice(
-										(selectedSku?.original_price ?? 0) -
-											(selectedSku?.price ?? 0),
-										product?.currency,
-									)}
+									<Price
+										amount={
+											(selectedSku?.original_price ?? 0) -
+											(selectedSku?.price ?? 0)
+										}
+										currency={product?.currency ?? "VND"}
+										emphasis="preferred"
+									/>
 								</p>
 							)}
 							{stockStatus && (
@@ -1053,7 +1088,11 @@ export default function ProductDetailPage({
 							<div className="space-y-2 text-sm">
 								<div className="flex justify-between">
 									<span className="text-muted-foreground">Unit price</span>
-									<span>{formatPrice(selectedSku.price, product?.currency)}</span>
+									<Price
+										amount={selectedSku.price}
+										currency={product?.currency ?? "VND"}
+										emphasis="preferred"
+									/>
 								</div>
 								<div className="flex justify-between">
 									<span className="text-muted-foreground">Quantity</span>
@@ -1062,22 +1101,28 @@ export default function ProductDetailPage({
 								{discount > 0 && (
 									<div className="flex justify-between text-green-600">
 										<span>Discount ({discount}%)</span>
-										<span>
+										<span className="inline-flex items-center gap-0.5">
 											-
-											{formatPrice(
-												(selectedSku.original_price - selectedSku.price) *
-													quantity,
-												product?.currency,
-											)}
+											<Price
+												amount={
+													(selectedSku.original_price - selectedSku.price) *
+													quantity
+												}
+												currency={product?.currency ?? "VND"}
+												emphasis="preferred"
+											/>
 										</span>
 									</div>
 								)}
 								<Separator />
 								<div className="flex justify-between font-semibold text-base">
 									<span>Total</span>
-									<span className={cn(discount > 0 && "text-red-600")}>
-										{formatPrice(selectedSku.price * quantity, product?.currency)}
-									</span>
+									<Price
+										amount={selectedSku.price * quantity}
+										currency={product?.currency ?? "VND"}
+										emphasis="preferred"
+										className={cn(discount > 0 && "text-red-600")}
+									/>
 								</div>
 							</div>
 						</div>
