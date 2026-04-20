@@ -39,7 +39,7 @@ import {
   Info,
   Hash,
 } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
+import { Price } from "@/components/ui/price"
 import { toast } from "@/components/ui/sonner"
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -345,7 +345,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   <div key={sku.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{formatPrice(sku.price)}</span>
+                        {/* ProductSPU has no currency field yet; fall back to VND */}
+                        <span className="font-medium">
+                          <Price amount={sku.price} currency="VND" emphasis="native-only" />
+                        </span>
                         <Badge variant="outline">Stock: {sku.stock}</Badge>
                         {sku.combinable && <Badge variant="secondary">Combinable</Badge>}
                       </div>
@@ -552,7 +555,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             <DialogDescription>
               {stockSKU?.attributes && stockSKU.attributes.length > 0
                 ? stockSKU.attributes.map(a => a.value).join(" / ")
-                : formatPrice(stockSKU?.price ?? 0)}
+                : <Price amount={stockSKU?.price ?? 0} currency="VND" emphasis="native-only" />}
             </DialogDescription>
           </DialogHeader>
 

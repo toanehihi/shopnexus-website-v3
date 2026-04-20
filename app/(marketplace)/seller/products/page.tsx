@@ -47,7 +47,6 @@ import {
 	Loader2,
 	Video,
 } from "lucide-react"
-import { formatPrice } from "@/lib/utils"
 
 export default function SellerProductsPage() {
 	const [search, setSearch] = useState("")

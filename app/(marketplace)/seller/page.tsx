@@ -33,7 +33,8 @@ import {
   useSellerDashboard,
   type UseSellerDashboardParams,
 } from "@/core/analytic/dashboard"
-import { formatPrice } from "@/lib/utils"
+import { Price } from "@/components/ui/price"
+import { formatMoney } from "@/lib/money"
 import Link from "next/link"
 
 // ===== Date Range Presets =====
@@ -284,6 +285,12 @@ export default function SellerDashboardPage() {
   const charts = data?.charts
   const topProducts = data?.top_products ?? []
 
+  // Seller dashboard uses native-only emphasis. Charts aggregate across
+  // products, so we pick one "dashboard currency" — default to VND until
+  // the backend exposes a seller-profile currency.
+  const sellerCurrency = "VND"
+  const formatSellerMoney = (v: number) => formatMoney(v, sellerCurrency)
+
   return (
     <div className="space-y-6">
       {/* Header with Date Picker */}
@@ -345,7 +352,7 @@ export default function SellerDashboardPage() {
           value={summary?.total_revenue ?? 0}
           change={summary?.comparison.revenue_change ?? null}
           icon={DollarSign}
-          format={formatPrice}
+          format={formatSellerMoney}
         />
         <StatCard
           title="Total Orders"
@@ -411,7 +418,7 @@ export default function SellerDashboardPage() {
           data={charts?.revenue ?? []}
           granularity={granularity}
           onGranularityChange={setGranularity}
-          formatValue={formatPrice}
+          formatValue={formatSellerMoney}
           allowedGranularities={allowedGranularities}
         />
         <DashboardChart
@@ -451,7 +458,9 @@ export default function SellerDashboardPage() {
                       </p>
                     </div>
                   </div>
-                  <p className="font-medium">{formatPrice(product.revenue)}</p>
+                  <p className="font-medium">
+                    <Price amount={product.revenue} currency={sellerCurrency} emphasis="native-only" />
+                  </p>
                 </div>
               ))}
             </div>
