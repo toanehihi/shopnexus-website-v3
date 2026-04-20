@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { TOrder } from "@/core/order/order.buyer"
-import { formatPrice } from "@/lib/utils"
+import { Price } from "@/components/ui/price"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -139,8 +139,14 @@ export function OrderList({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{item.sku_name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Qty: {item.quantity} x {formatPrice(item.unit_price)}
+                    <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
+                      Qty: {item.quantity} x{" "}
+                      <Price
+                        amount={item.unit_price}
+                        currency={order.payment?.seller_currency || "VND"}
+                        emphasis="native"
+                        showRateHint
+                      />
                     </p>
                   </div>
                 </div>
@@ -156,7 +162,13 @@ export function OrderList({
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
-                <p className="font-semibold">{formatPrice(order.total)}</p>
+                <Price
+                  amount={order.total}
+                  currency={order.payment?.seller_currency || "VND"}
+                  emphasis="native"
+                  showRateHint
+                  className="font-semibold"
+                />
               </div>
               <div className="flex gap-2">
                 {order.payment?.status === "Success" && order.transport?.status === "Delivered" && order.items[0] && (

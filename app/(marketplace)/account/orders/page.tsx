@@ -31,7 +31,8 @@ import {
   Loader2,
   Inbox,
 } from "lucide-react"
-import { formatPrice, cn } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { Price } from "@/components/ui/price"
 import { toast } from "sonner"
 
 // ===== Pending Items Section =====
@@ -53,8 +54,14 @@ function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: 
           </div>
           <div className="flex-1 min-w-0">
             <ProductLink spuId={item.spu_id}>{item.sku_name}</ProductLink>
-            <p className="text-sm text-muted-foreground">
-              Qty: {item.quantity} x {formatPrice(item.unit_price)}
+            <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
+              Qty: {item.quantity} x{" "}
+              <Price
+                amount={item.unit_price}
+                currency="VND"
+                emphasis="native"
+                showRateHint
+              />
             </p>
             {item.note && (
               <p className="text-sm text-muted-foreground truncate">{item.note}</p>
@@ -65,7 +72,13 @@ function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: 
               <Clock className="h-3 w-3" />
               {badgeLabel}
             </Badge>
-            <p className="text-sm font-medium">{formatPrice(item.unit_price * item.quantity)}</p>
+            <Price
+              amount={item.unit_price * item.quantity}
+              currency="VND"
+              emphasis="native"
+              showRateHint
+              className="text-sm font-medium"
+            />
             {!item.order_id && !item.date_cancelled && (
               <Button variant="ghost" size="sm" className="text-destructive h-7 px-2" onClick={() => onCancel(item.id)}>
                 Cancel

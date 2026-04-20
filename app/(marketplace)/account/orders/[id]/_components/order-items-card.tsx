@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { formatPrice } from "@/lib/utils"
+import { Price } from "@/components/ui/price"
 import { ProductLink } from "@/components/product/product-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Package } from "lucide-react"
@@ -17,9 +17,10 @@ interface OrderItemsCardProps {
 		note?: string | null
 		resources?: { url: string }[]
 	}[]
+	currency: string
 }
 
-export function OrderItemsCard({ items }: OrderItemsCardProps) {
+export function OrderItemsCard({ items, currency }: OrderItemsCardProps) {
 	return (
 		<Card>
 			<CardHeader>
@@ -57,9 +58,13 @@ export function OrderItemsCard({ items }: OrderItemsCardProps) {
 								<p className="text-sm text-muted-foreground">
 									Qty: {item.quantity}
 								</p>
-								<p className="font-medium">
-									{formatPrice(item.unit_price * item.quantity)}
-								</p>
+								<Price
+									amount={item.unit_price * item.quantity}
+									currency={currency}
+									emphasis="native"
+									showRateHint
+									className="font-medium"
+								/>
 							</div>
 						</div>
 					</div>

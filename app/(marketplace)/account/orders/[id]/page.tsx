@@ -109,7 +109,10 @@ export default function OrderDetailPage({
 			<div className="grid lg:grid-cols-3 gap-6">
 				{/* Order Items */}
 				<div className="lg:col-span-2 space-y-6">
-					<OrderItemsCard items={order.items} />
+					<OrderItemsCard
+						items={order.items}
+						currency={order.payment?.seller_currency || "VND"}
+					/>
 
 					{/* Shipping Info */}
 					<Card>
@@ -132,6 +135,7 @@ export default function OrderDetailPage({
 						productDiscount={order.product_discount}
 						transportCost={order.transport_cost}
 						total={order.total}
+						currency={order.payment?.seller_currency || "VND"}
 					/>
 
 					<PaymentInfoCard payment={order.payment} />
