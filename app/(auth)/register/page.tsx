@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRegisterBasic } from "@/core/account/auth"
 import { registerSchema, RegisterFormData } from "@/lib/validations"
@@ -13,9 +13,34 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Eye, EyeOff, Loader2, Mail, Lock, User, Check } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { cn } from "@/lib/utils"
+
+// Starter list of supported signup countries (ISO 3166-1 alpha-2).
+// Keep it compact; expand later as the marketplace grows.
+const SUPPORTED_COUNTRIES = [
+  "VN", "US", "GB", "DE", "FR", "JP", "KR", "TH", "SG", "MY",
+  "ID", "PH", "AU", "CA", "IN", "CN", "TW", "HK", "IT", "ES",
+  "NL", "BR", "MX", "AE",
+] as const
+
+function useCountryOptions() {
+  return useMemo(() => {
+    const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
+    return SUPPORTED_COUNTRIES.map((code) => ({
+      code,
+      label: regionNames.of(code) ?? code,
+    })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [])
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -23,10 +48,13 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
 
+  const countryOptions = useCountryOptions()
+
   const {
     register,
     handleSubmit,
     watch,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -34,6 +62,7 @@ export default function RegisterPage() {
       name: "",
       email: "",
       phone: "",
+      country: "",
       password: "",
       confirmPassword: "",
     },
@@ -59,15 +88,23 @@ export default function RegisterPage() {
         email: data.email,
         username: data.name || null,
         password: data.password,
+        country: data.country,
       })
       toast.success("Account created!", {
         description: "Welcome to ShopNexus. You can now start shopping.",
       })
       router.push("/")
     } catch (err) {
-      toast.error("Registration failed", {
-        description: "This email may already be in use. Please try again.",
-      })
+      const message = err instanceof Error ? err.message : String(err)
+      if (/country/i.test(message)) {
+        toast.error("Registration failed", {
+          description: "Please pick a supported country and try again.",
+        })
+      } else {
+        toast.error("Registration failed", {
+          description: "This email may already be in use. Please try again.",
+        })
+      }
     }
   }
 
@@ -115,6 +152,42 @@ export default function RegisterPage() {
             </div>
             {errors.email && (
               <p className="text-sm text-destructive">{errors.email.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="country">Country *</Label>
+            <Controller
+              control={control}
+              name="country"
+              render={({ field }) => (
+                <Select
+                  value={field.value || undefined}
+                  onValueChange={field.onChange}
+                  disabled={isSubmitting || registerMutation.isPending}
+                >
+                  <SelectTrigger
+                    id="country"
+                    className={cn(
+                      "w-full",
+                      errors.country && "border-destructive"
+                    )}
+                    aria-invalid={errors.country ? true : undefined}
+                  >
+                    <SelectValue placeholder="Select your country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {countryOptions.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>
+                        {c.label} ({c.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.country && (
+              <p className="text-sm text-destructive">{errors.country.message}</p>
             )}
           </div>
 

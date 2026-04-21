@@ -31,6 +31,10 @@ export const registerSchema = z
         (val) => !val || /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/.test(val),
         "Please enter a valid phone number"
       ),
+    country: z
+      .string()
+      .min(1, "Country is required")
+      .regex(/^[A-Z]{2}$/, "Country must be a 2-letter ISO code"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters"),

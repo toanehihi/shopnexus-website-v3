@@ -49,6 +49,7 @@ export const useRegisterBasic = () =>
       email?: string | null
       phone?: string | null
       password: string
+      country: string
     }) =>
       customFetchStandard<AuthCredResponse>('account/auth/register/basic', {
         method: 'POST',
