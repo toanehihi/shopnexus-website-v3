@@ -18,6 +18,7 @@ import {
   convertMoney,
 } from "@/lib/money"
 import { useExchangeRates, usePreferredCurrency } from "@/core/common/currency"
+import { walletCurrencyForCountry } from "@/lib/countries"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -617,6 +618,44 @@ export default function CheckoutPage() {
                   <span>Estimated Total</span>
                   <span>{formatMoney(estimatedTotalPreferred, summaryCurrency)}</span>
                 </div>
+                {(() => {
+                  const buyerCurrency = walletCurrencyForCountry(user?.country)
+                  if (!buyerCurrency || !rateData) return null
+                  // Show the preview only when every item shares a single
+                  // seller currency AND it differs from the buyer's wallet.
+                  const sellerCurrencies = Array.from(
+                    new Set(cart.map((i) => i.currency)),
+                  )
+                  if (sellerCurrencies.length !== 1) return null
+                  const sellerCurrency = sellerCurrencies[0]
+                  if (sellerCurrency === buyerCurrency) return null
+                  const totalBuyer = convertMoney(
+                    subtotal,
+                    sellerCurrency,
+                    buyerCurrency,
+                    rateData.rates,
+                  )
+                  if (totalBuyer === null) return null
+                  const rateFrom =
+                    sellerCurrency === "USD"
+                      ? 1
+                      : rateData.rates[sellerCurrency]
+                  const rateTo =
+                    buyerCurrency === "USD" ? 1 : rateData.rates[buyerCurrency]
+                  if (!rateFrom || !rateTo) return null
+                  const rate = rateTo / rateFrom
+                  return (
+                    <div className="text-xs text-muted-foreground pt-1">
+                      Charged as approximately{" "}
+                      {formatMoney(totalBuyer, buyerCurrency)} (≈{" "}
+                      {formatMoney(subtotal, sellerCurrency)} at 1{" "}
+                      {sellerCurrency} = {rate.toFixed(4)} {buyerCurrency}).
+                      <span className="block">
+                        Final rate locked at checkout confirmation.
+                      </span>
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Checkout Button (desktop) */}

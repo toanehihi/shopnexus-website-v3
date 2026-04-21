@@ -18,9 +18,10 @@ import { useListServiceOption } from "@/core/common/option"
 import { useListPaymentMethods } from "@/core/account/payment-method"
 import { useGetWalletBalance } from "@/core/account/wallet"
 import { formatSoldCount } from "@/lib/utils"
-import { formatMoney, formatPriceInline } from "@/lib/money"
+import { formatMoney, formatPriceInline, convertMoney } from "@/lib/money"
 import { Price } from "@/components/ui/price"
 import { useExchangeRates, usePreferredCurrency } from "@/core/common/currency"
+import { walletCurrencyForCountry } from "@/lib/countries"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -1310,6 +1311,46 @@ export default function ProductDetailPage({
 										className={cn(discount > 0 && "text-red-600")}
 									/>
 								</div>
+								{(() => {
+									const sellerCurrency = product?.currency ?? "VND"
+									const buyerCurrency = walletCurrencyForCountry(me?.country)
+									if (
+										!buyerCurrency ||
+										!rateData ||
+										buyerCurrency === sellerCurrency
+									) {
+										return null
+									}
+									const totalSeller = selectedSku.price * quantity
+									const totalBuyer = convertMoney(
+										totalSeller,
+										sellerCurrency,
+										buyerCurrency,
+										rateData.rates,
+									)
+									if (totalBuyer === null) return null
+									const rateFrom =
+										sellerCurrency === "USD"
+											? 1
+											: rateData.rates[sellerCurrency]
+									const rateTo =
+										buyerCurrency === "USD"
+											? 1
+											: rateData.rates[buyerCurrency]
+									if (!rateFrom || !rateTo) return null
+									const rate = rateTo / rateFrom
+									return (
+										<div className="text-xs text-muted-foreground pt-1">
+											Charged as approximately{" "}
+											{formatMoney(totalBuyer, buyerCurrency)} (≈{" "}
+											{formatMoney(totalSeller, sellerCurrency)} at 1{" "}
+											{sellerCurrency} = {rate.toFixed(4)} {buyerCurrency}).
+											<span className="block">
+												Final rate locked at checkout confirmation.
+											</span>
+										</div>
+									)
+								})()}
 							</div>
 						</div>
 					)}
