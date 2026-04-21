@@ -40,26 +40,17 @@ export class ResponseError extends Error {
 /**
  * Detects the backend's `address_country_mismatch` error on create/update
  * contact or buyer checkout.
- *
- * The backend emits the full formatted string as the error `message`
- * (prefixed with the identifier), because the JSON envelope's `code` field
- * is the numeric HTTP status. Callers match by prefix on the message.
  */
 export function isAddressCountryMismatch(err: unknown): boolean {
-  if (!(err instanceof Error)) return false
-  return err.message.startsWith("address_country_mismatch")
+  return err instanceof ResponseError && err.code === "address_country_mismatch"
 }
 
 /**
  * Detects the backend's `wallet_not_empty` 409 returned by
  * `PATCH /profile/country` when the wallet has a non-zero balance.
- *
- * See note on {@link isAddressCountryMismatch} — `ResponseError.code` is the
- * numeric HTTP status, so we match on the message prefix instead.
  */
 export function isWalletNotEmpty(err: unknown): boolean {
-  if (!(err instanceof Error)) return false
-  return err.message.startsWith("wallet_not_empty")
+  return err instanceof ResponseError && err.code === "wallet_not_empty"
 }
 
 /**
@@ -76,8 +67,7 @@ export function parseAddressCountryMismatch(
   err: unknown,
 ): { resolvedCountry: string | null; profileCountry: string | null } | null {
   if (!isAddressCountryMismatch(err)) return null
-  const message = (err as Error).message
-  const match = message.match(
+  const match = (err as ResponseError).message.match(
     /address resolves to ([A-Za-z]{2}),\s*(?:profile|buyer) country is ([A-Za-z]{2})/,
   )
   if (!match) {
