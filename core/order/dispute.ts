@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { customFetchStandard } from "@/lib/queryclient/custom-fetch"
 import { useInfiniteQueryPagination } from "@/lib/queryclient/use-infinite-query"
 import { PaginationParams } from "@/lib/queryclient/response.type"
@@ -9,7 +9,7 @@ import { Status } from "../common/status.type"
 export type TRefundDispute = {
   id: string
   refund_id: string
-  issued_by_id: string
+  account_id: string
   reason: string
   status: Status
   date_created: string
@@ -32,25 +32,26 @@ export const useCreateRefundDispute = () => {
   })
 }
 
-export const useListRefundDisputes = (params?: PaginationParams) =>
-  useInfiniteQueryPagination<TRefundDispute>({
-    queryKey: ["disputes", params],
-    url: "order/disputes",
-    params,
-  })
+export const useListRefundDisputes = (params: PaginationParams) =>
+  useInfiniteQueryPagination<TRefundDispute>(
+    ["disputes"],
+    "order/disputes",
+    params
+  )
 
 export const useListRefundDisputesByRefund = (
   refundId: string,
-  params?: PaginationParams
+  params: PaginationParams
 ) =>
-  useInfiniteQueryPagination<TRefundDispute>({
-    queryKey: ["disputes", "refund", refundId, params],
-    url: `order/refunds/${refundId}/disputes`,
-    params,
-  })
+  useInfiniteQueryPagination<TRefundDispute>(
+    ["disputes", "refund", refundId],
+    `order/refunds/${refundId}/disputes`,
+    params
+  )
 
 export const useGetRefundDispute = (disputeId: string) =>
-  useInfiniteQueryPagination<TRefundDispute>({
+  useQuery({
     queryKey: ["disputes", disputeId],
-    url: `order/disputes/${disputeId}`,
+    queryFn: () => customFetchStandard<TRefundDispute>(`order/disputes/${disputeId}`),
+    enabled: !!disputeId,
   })
