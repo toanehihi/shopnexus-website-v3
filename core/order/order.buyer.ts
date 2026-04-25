@@ -41,6 +41,7 @@ export type TOrderItem = {
   AccountID: string
   SellerID: string
   SkuID: string
+  SpuID: string
   SkuName: string
   Address: string
   Note: string | null
@@ -83,6 +84,8 @@ export type TBuyerCheckoutResult = {
   items: TOrderItem[]
   checkout_tx_ids: number[]
   blocker_tx_id: number
+  wallet_deducted: number
+  total: number
   requires_gateway_payment: boolean
   gateway_url: string | null
 }

@@ -111,7 +111,7 @@ export default function OrderDetailPage({
 				<div className="lg:col-span-2 space-y-6">
 					<OrderItemsCard
 						items={order.Items}
-						currency="VND"
+						currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
 					/>
 
 					{/* Shipping Info */}
@@ -132,7 +132,7 @@ export default function OrderDetailPage({
 				<div className="space-y-6">
 					<OrderSummaryCard
 						totalAmount={order.TotalAmount}
-						currency="VND"
+						currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
 					/>
 
 					<PaymentInfoCard confirmFeeTx={order.ConfirmFeeTx} />

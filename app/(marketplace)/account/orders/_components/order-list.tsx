@@ -171,7 +171,7 @@ export function OrderList({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setReviewingOrder({ orderId: order.ID, spuId: order.Items[0].SkuID })}
+                    onClick={() => setReviewingOrder({ orderId: order.ID, spuId: order.Items[0].SpuID })}
                   >
                     <Star className="h-4 w-4 mr-1" />
                     Leave a Review

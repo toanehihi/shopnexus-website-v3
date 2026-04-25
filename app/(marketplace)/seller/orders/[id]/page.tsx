@@ -243,7 +243,7 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
                       <span className="font-medium">
                         <Price
                           amount={item.SubtotalAmount}
-                          currency="VND"
+                          currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
                           emphasis="native-only"
                         />
                       </span>
@@ -356,7 +356,7 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
                 <span>
                   <Price
                     amount={order.TotalAmount}
-                    currency="VND"
+                    currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
                     emphasis="native-only"
                   />
                 </span>
