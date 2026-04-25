@@ -17,7 +17,7 @@ export type Promotion = {
   type: string
   title: string
   description: string | null
-  is_active: boolean
+  is_enabled: boolean
   auto_apply: boolean
   date_started: string
   date_ended: string | null
@@ -35,7 +35,7 @@ export const useGetPromotion = (id?: string) => useQuery({
 })
 
 export const useListPromotion = (params: PaginationParams<{
-  is_active?: boolean
+  is_enabled?: boolean
 }>) =>
   useInfiniteQueryPagination<Promotion>(
     ['promotion', 'list'],

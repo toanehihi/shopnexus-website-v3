@@ -27,7 +27,7 @@ export type Promotion = {
   type: string
   title: string
   description: string | null
-  is_active: boolean
+  is_enabled: boolean
   auto_apply: boolean
   group: string
   priority: number
@@ -58,7 +58,7 @@ export const useGetPromotion = (id?: string) =>
 
 export const useListPromotionVendor = (
   params: PaginationParams<{
-    is_active?: boolean
+    is_enabled?: boolean
   }>
 ) =>
   useInfiniteQueryPagination<Promotion>(
@@ -75,7 +75,7 @@ export const useCreatePromotion = () => {
       type: PromotionType
       title: string
       description?: string | null
-      is_active: boolean
+      is_enabled: boolean
       auto_apply: boolean
       group: string
       priority: number
@@ -102,7 +102,7 @@ export const useUpdatePromotion = () => {
       code?: string | null
       title?: string | null
       description?: string | null
-      is_active?: boolean | null
+      is_enabled?: boolean | null
       auto_apply?: boolean | null
       group?: string | null
       priority?: number | null
@@ -149,7 +149,7 @@ export const useCreateDiscount = () => {
       }>
       title: string
       description?: string | null
-      is_active: boolean
+      is_enabled: boolean
       auto_apply: boolean
       date_started: string
       date_ended?: string | null
@@ -181,7 +181,7 @@ export const useUpdateDiscount = () => {
       }>
       title?: string | null
       description?: string | null
-      is_active?: boolean | null
+      is_enabled?: boolean | null
       date_started?: string | null
       date_ended?: string | null
       null_date_ended?: boolean

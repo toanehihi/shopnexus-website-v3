@@ -49,7 +49,7 @@ type FormData = {
   title: string
   type: PromotionType
   description: string
-  is_active: boolean
+  is_enabled: boolean
   auto_apply: boolean
   group: string
   priority: string
@@ -63,7 +63,7 @@ const defaultFormData: FormData = {
   title: "",
   type: "Discount",
   description: "",
-  is_active: true,
+  is_enabled: true,
   auto_apply: false,
   group: "",
   priority: "0",
@@ -78,7 +78,7 @@ function promotionToForm(promo: Promotion): FormData {
     title: promo.title,
     type: (promo.type as PromotionType) || "Discount",
     description: promo.description ?? "",
-    is_active: promo.is_active,
+    is_enabled: promo.is_enabled,
     auto_apply: promo.auto_apply,
     group: promo.group ?? "",
     priority: String(promo.priority ?? 0),
@@ -154,7 +154,7 @@ export default function SellerPromotionsPage() {
       type: formData.type,
       title: formData.title,
       description: formData.description || null,
-      is_active: formData.is_active,
+      is_enabled: formData.is_enabled,
       auto_apply: formData.auto_apply,
       group: formData.group,
       priority: parseInt(formData.priority) || 0,
@@ -176,7 +176,7 @@ export default function SellerPromotionsPage() {
       code: formData.code,
       title: formData.title,
       description: formData.description || null,
-      is_active: formData.is_active,
+      is_enabled: formData.is_enabled,
       auto_apply: formData.auto_apply,
       group: formData.group,
       priority: parseInt(formData.priority) || 0,
@@ -308,14 +308,14 @@ export default function SellerPromotionsPage() {
                       </Badge>
                       <Badge
                         variant={
-                          promo.is_active && !isExpired(promo)
+                          promo.is_enabled && !isExpired(promo)
                             ? "default"
                             : "secondary"
                         }
                       >
                         {isExpired(promo)
                           ? "Expired"
-                          : promo.is_active
+                          : promo.is_enabled
                             ? "Active"
                             : "Inactive"}
                       </Badge>
@@ -544,9 +544,9 @@ export default function SellerPromotionsPage() {
                 </p>
               </div>
               <Switch
-                checked={formData.is_active}
+                checked={formData.is_enabled}
                 onCheckedChange={(checked) =>
-                  setFormData({ ...formData, is_active: checked })
+                  setFormData({ ...formData, is_enabled: checked })
                 }
               />
             </div>
