@@ -30,6 +30,7 @@ import {
   Inbox,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isCancelledOrder, isCompletedOrder, isActiveOrder } from "@/lib/order-status"
 import { useExchangeRates, useCurrency } from "@/core/common/currency"
 import { formatPriceInline } from "@/lib/money"
 import { toast } from "sonner"
@@ -105,7 +106,7 @@ function PendingTab() {
     [pendingData],
   )
   const activeOrders = useMemo(
-    () => ordersData?.pages.flatMap((p) => p.data) ?? [],
+    () => (ordersData?.pages.flatMap((p) => p.data) ?? []).filter(isActiveOrder),
     [ordersData],
   )
 
@@ -219,15 +220,6 @@ function PendingTab() {
 
 // ===== Main Page =====
 
-function isCompletedOrder(order: TOrder): boolean {
-  return order.Transport?.Status === "Delivered"
-}
-
-function isCancelledOrder(order: TOrder): boolean {
-  const ts = order.Transport?.Status
-  const cs = order.ConfirmFeeTx?.Status
-  return cs === "Cancelled" || cs === "Failed" || ts === "Failed" || ts === "Cancelled"
-}
 
 export default function OrdersPage() {
   const {

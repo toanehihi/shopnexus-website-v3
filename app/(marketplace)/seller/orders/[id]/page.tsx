@@ -23,6 +23,7 @@ import {
   ShoppingCart,
 } from "lucide-react"
 import { Price } from "@/components/ui/price"
+import { isCancelledOrder } from "@/lib/order-status"
 import { useGetAccount } from "@/core/account/account"
 
 function summarizeOrder(items?: Array<{ SkuName: string }>): string {
@@ -79,7 +80,7 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
   const getCurrentStep = (order: TOrder) => {
     const cs = order.ConfirmFeeTx?.Status
     const ts = order.Transport?.Status
-    if (cs === "Cancelled" || cs === "Failed") return -1
+    if (isCancelledOrder(order)) return -1
     if (ts === "Delivered") return 3
     if (ts === "InTransit" || ts === "OutForDelivery") return 2
     if (cs === "Success") return 1

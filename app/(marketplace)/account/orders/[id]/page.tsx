@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, MapPin, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isCancelledOrder } from "@/lib/order-status"
 import { OrderDetailSkeleton } from "./_components/order-detail-skeleton"
 import { OrderProgress } from "./_components/order-progress"
 import { OrderItemsCard } from "./_components/order-items-card"
@@ -63,7 +64,7 @@ export default function OrderDetailPage({
 	}
 
 	const displayStatus = getOrderDisplayStatus(order)
-	const isCancelled = order.ConfirmFeeTx?.Status === "Cancelled" || order.ConfirmFeeTx?.Status === "Failed"
+	const isCancelled = isCancelledOrder(order)
 
 	return (
 		<div className="space-y-6">
