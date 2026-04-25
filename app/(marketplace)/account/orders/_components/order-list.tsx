@@ -48,10 +48,10 @@ export function OrderList({
   const [reviewingOrder, setReviewingOrder] = useState<{ orderId: string; spuId: string } | null>(null)
   const preferred = useCurrency()
   const { data: rateData } = useExchangeRates()
-  const fmtInOrder = (amount: number) =>
+  const fmtInOrder = (amount: number, currency: string) =>
     formatPriceInline(
       amount,
-      "VND",
+      currency,
       preferred,
       rateData?.rates,
       "native",
@@ -146,7 +146,7 @@ export function OrderList({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{item.SkuName}</p>
                     <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
-                      Qty: {item.Quantity} &middot; {fmtInOrder(item.SubtotalAmount)} total
+                      Qty: {item.Quantity} &middot; {fmtInOrder(item.SubtotalAmount, order.ConfirmFeeTx?.ToCurrency ?? "VND")} total
                     </p>
                   </div>
                 </div>
@@ -163,7 +163,7 @@ export function OrderList({
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
                 <span className="font-semibold">
-                  {fmtInOrder(order.TotalAmount)}
+                  {fmtInOrder(order.TotalAmount, order.ConfirmFeeTx?.ToCurrency ?? "VND")}
                 </span>
               </div>
               <div className="flex gap-2">

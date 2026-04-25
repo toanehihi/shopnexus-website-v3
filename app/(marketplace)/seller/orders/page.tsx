@@ -10,6 +10,8 @@ import {
 } from "@/core/order/order.seller"
 import { TOrderItem } from "@/core/order/order.buyer"
 import { useGetAccount } from "@/core/account/account"
+import { useListServiceOption } from "@/core/common/option"
+import { useGetWalletBalance } from "@/core/account/wallet"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -80,11 +83,15 @@ function IncomingTab() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [confirmNote, setConfirmNote] = useState("")
+  const [useWallet, setUseWallet] = useState(false)
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState("")
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useListSellerPendingItems({ limit: 20 })
   const confirmMutation = useConfirmSellerPending()
   const rejectMutation = useRejectSellerPending()
+  const { data: paymentOptions } = useListServiceOption({ category: "payment" })
+  const { data: walletData } = useGetWalletBalance()
 
   const items = useMemo(
     () => data?.pages.flatMap((page) => page.data) ?? [],
@@ -133,16 +140,22 @@ function IncomingTab() {
 
   const handleConfirm = async () => {
     if (selectedIds.size === 0) return
+    if (!selectedPaymentOption) {
+      toast.error("Please select a payment method.")
+      return
+    }
     try {
       const result = await confirmMutation.mutateAsync({
         item_ids: Array.from(selectedIds),
-        use_wallet: false,
-        payment_option: "",
+        use_wallet: useWallet,
+        payment_option: selectedPaymentOption,
         note: confirmNote || undefined,
       })
       setSelectedIds(new Set())
       setShowConfirmDialog(false)
       setConfirmNote("")
+      setUseWallet(false)
+      setSelectedPaymentOption("")
       if (result.requires_gateway_payment) {
         if (result.gateway_url) {
           toast.info("Redirecting to payment...")
@@ -348,6 +361,62 @@ function IncomingTab() {
               </div>
             )}
 
+            {/* Payment Method */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Payment Method <span className="text-destructive">*</span></Label>
+              {paymentOptions && paymentOptions.length > 0 ? (
+                <RadioGroup
+                  value={selectedPaymentOption}
+                  onValueChange={setSelectedPaymentOption}
+                  className="space-y-2"
+                >
+                  {paymentOptions.map((option) => (
+                    <Label
+                      key={option.id}
+                      htmlFor={`confirm-pay-${option.id}`}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                        selectedPaymentOption === option.id && "border-primary bg-accent/30",
+                      )}
+                    >
+                      <RadioGroupItem value={option.id} id={`confirm-pay-${option.id}`} />
+                      <div>
+                        <span className="font-medium">{option.name}</span>
+                        {option.description && (
+                          <p className="text-xs text-muted-foreground">{option.description}</p>
+                        )}
+                      </div>
+                    </Label>
+                  ))}
+                </RadioGroup>
+              ) : (
+                <p className="text-sm text-muted-foreground">Loading payment options…</p>
+              )}
+            </div>
+
+            {/* Use Wallet */}
+            <Label
+              htmlFor="confirm-use-wallet"
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                useWallet && "border-primary bg-accent/30",
+              )}
+            >
+              <Checkbox
+                id="confirm-use-wallet"
+                checked={useWallet}
+                onCheckedChange={(checked) => setUseWallet(checked === true)}
+              />
+              <div>
+                <span className="font-medium">Use wallet balance</span>
+                {walletData !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    Available: <Price amount={walletData.balance} currency="VND" emphasis="native-only" />
+                  </p>
+                )}
+              </div>
+            </Label>
+
             <div className="space-y-2">
               <Label htmlFor="confirm-note">Note (optional)</Label>
               <Textarea
@@ -361,7 +430,7 @@ function IncomingTab() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancel</Button>
-            <Button onClick={handleConfirm} disabled={selectedIds.size === 0 || confirmMutation.isPending}>
+            <Button onClick={handleConfirm} disabled={selectedIds.size === 0 || !selectedPaymentOption || confirmMutation.isPending}>
               {confirmMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming...</>
               ) : (
