@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { TOrder } from "@/core/order/order.buyer"
 import { useExchangeRates, useCurrency } from "@/core/common/currency"
 import { formatPriceInline } from "@/lib/money"
@@ -14,19 +13,19 @@ import { WriteReviewDialog } from "@/components/product/write-review-dialog"
 import { Package, ChevronRight, ShoppingBag, Loader2, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-function summarizeOrder(items?: Array<{ sku_name: string }>): string {
+function summarizeOrder(items?: Array<{ SkuName: string }>): string {
   if (!items?.length) return "Order"
-  if (items.length === 1) return items[0].sku_name
-  if (items.length === 2) return `${items[0].sku_name}, ${items[1].sku_name}`
-  return `${items[0].sku_name} and ${items.length - 1} more`
+  if (items.length === 1) return items[0].SkuName
+  if (items.length === 2) return `${items[0].SkuName}, ${items[1].SkuName}`
+  return `${items[0].SkuName} and ${items.length - 1} more`
 }
 
 function getOrderDisplayStatus(order: TOrder): { label: string; color: string } {
-  const ps = order.payment?.status
-  const ts = order.transport?.status
+  const cs = order.ConfirmFeeTx?.Status
+  const ts = order.Transport?.Status
 
-  if (ps === "Failed") return { label: "Payment Failed", color: "bg-red-100 text-red-800" }
-  if (ps === "Cancelled") return { label: "Cancelled", color: "bg-red-100 text-red-800" }
+  if (cs === "Failed") return { label: "Payment Failed", color: "bg-red-100 text-red-800" }
+  if (cs === "Cancelled") return { label: "Cancelled", color: "bg-red-100 text-red-800" }
   if (ts === "Delivered") return { label: "Completed", color: "bg-green-100 text-green-800" }
   if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", color: "bg-purple-100 text-purple-800" }
   if (ts === "Failed" || ts === "Cancelled") return { label: "Delivery Failed", color: "bg-red-100 text-red-800" }
@@ -49,10 +48,10 @@ export function OrderList({
   const [reviewingOrder, setReviewingOrder] = useState<{ orderId: string; spuId: string } | null>(null)
   const preferred = useCurrency()
   const { data: rateData } = useExchangeRates()
-  const fmtInOrder = (order: TOrder, amount: number) =>
+  const fmtInOrder = (amount: number) =>
     formatPriceInline(
       amount,
-      order.payment?.seller_currency || "VND",
+      "VND",
       preferred,
       rateData?.rates,
       "native",
@@ -108,20 +107,20 @@ export function OrderList({
   return (
     <div className="space-y-4">
       {orders.map((order) => (
-        <Card key={order.id}>
+        <Card key={order.ID}>
           <CardContent className="p-4">
             {/* Order Header */}
             <div className="flex items-center justify-between gap-4 mb-4">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-sm font-medium truncate">
-                  {summarizeOrder(order.items)}
+                  {summarizeOrder(order.Items)}
                 </span>
                 <div className="flex items-center gap-4 text-sm">
                   <span className="text-muted-foreground">
-                    #{order.id.slice(0, 8)}
+                    #{order.ID.slice(0, 8)}
                   </span>
                   <span className="text-muted-foreground">
-                    {new Date(order.date_created).toLocaleDateString()}
+                    {new Date(order.DateCreated).toLocaleDateString()}
                   </span>
                 </div>
               </div>
@@ -139,26 +138,22 @@ export function OrderList({
 
             {/* Order Items */}
             <div className="space-y-3">
-              {order.items.slice(0, 2).map((item) => (
-                <div key={item.id} className="flex items-center gap-3">
+              {order.Items.slice(0, 2).map((item) => (
+                <div key={item.ID} className="flex items-center gap-3">
                   <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                    {item.resources?.[0] ? (
-                      <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
-                    ) : (
-                      <Package className="h-6 w-6 text-muted-foreground" />
-                    )}
+                    <Package className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.sku_name}</p>
+                    <p className="text-sm font-medium truncate">{item.SkuName}</p>
                     <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
-                      Qty: {item.quantity} x {fmtInOrder(order, item.unit_price)}
+                      Qty: {item.Quantity} &middot; {fmtInOrder(item.SubtotalAmount)} total
                     </p>
                   </div>
                 </div>
               ))}
-              {order.items.length > 2 && (
+              {order.Items.length > 2 && (
                 <p className="text-sm text-muted-foreground">
-                  +{order.items.length - 2} more items
+                  +{order.Items.length - 2} more items
                 </p>
               )}
             </div>
@@ -168,22 +163,22 @@ export function OrderList({
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
                 <span className="font-semibold">
-                  {fmtInOrder(order, order.total)}
+                  {fmtInOrder(order.TotalAmount)}
                 </span>
               </div>
               <div className="flex gap-2">
-                {order.payment?.status === "Success" && order.transport?.status === "Delivered" && order.items[0] && (
+                {order.ConfirmFeeTx?.Status === "Success" && order.Transport?.Status === "Delivered" && order.Items[0] && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setReviewingOrder({ orderId: order.id, spuId: order.items[0].spu_id })}
+                    onClick={() => setReviewingOrder({ orderId: order.ID, spuId: order.Items[0].SkuID })}
                   >
                     <Star className="h-4 w-4 mr-1" />
                     Leave a Review
                   </Button>
                 )}
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/account/orders/${order.id}`}>
+                  <Link href={`/account/orders/${order.ID}`}>
                     View Details
                     <ChevronRight className="h-4 w-4 ml-1" />
                   </Link>

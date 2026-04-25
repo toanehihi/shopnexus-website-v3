@@ -3,16 +3,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CreditCard } from "lucide-react"
+import type { TTransaction } from "@/core/order/order.buyer"
 
 interface PaymentInfoCardProps {
-  payment: {
-    option: string
-    status: string
-    date_paid: string | null
-  } | null
+  confirmFeeTx: TTransaction | null | undefined
 }
 
-export function PaymentInfoCard({ payment }: PaymentInfoCardProps) {
+export function PaymentInfoCard({ confirmFeeTx }: PaymentInfoCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -22,23 +19,25 @@ export function PaymentInfoCard({ payment }: PaymentInfoCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {payment ? (
+        {confirmFeeTx ? (
           <>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Method</span>
-              <span>{payment.option}</span>
-            </div>
+            {confirmFeeTx.PaymentOption && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Method</span>
+                <span>{confirmFeeTx.PaymentOption}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Status</span>
               <Badge variant="secondary" className="font-normal">
-                {payment.status}
+                {confirmFeeTx.Status}
               </Badge>
             </div>
-            {payment.date_paid && (
+            {confirmFeeTx.DatePaid && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Paid on</span>
                 <span>
-                  {new Date(payment.date_paid).toLocaleDateString()}
+                  {new Date(confirmFeeTx.DatePaid).toLocaleDateString()}
                 </span>
               </div>
             )}

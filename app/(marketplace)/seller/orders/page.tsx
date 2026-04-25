@@ -2,8 +2,6 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import Image from "next/image"
-import { ProductLink } from "@/components/product/product-link"
 import {
   useListSellerPendingItems,
   useConfirmSellerPending,
@@ -59,15 +57,15 @@ function AccountName({ id, fallback = "User" }: { id: string; fallback?: string 
   return <>{data?.name || data?.username || fallback}</>
 }
 
-function summarizeOrder(items?: Array<{ sku_name: string }>): string {
+function summarizeOrder(items?: Array<{ SkuName: string }>): string {
   if (!items?.length) return "Order"
-  if (items.length === 1) return items[0].sku_name
-  if (items.length === 2) return `${items[0].sku_name}, ${items[1].sku_name}`
-  return `${items[0].sku_name} and ${items.length - 1} more`
+  if (items.length === 1) return items[0].SkuName
+  if (items.length === 2) return `${items[0].SkuName}, ${items[1].SkuName}`
+  return `${items[0].SkuName} and ${items.length - 1} more`
 }
 
-function getOrderDisplayStatus(order: { payment?: { status: string } | null; transport?: { status: string } | null }): { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType } {
-  const ts = order.transport?.status
+function getOrderDisplayStatus(order: { Transport?: { Status: string | null } | null; ConfirmFeeTx?: { Status: string } | null }): { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType } {
+  const ts = order.Transport?.Status
 
   if (ts === "Delivered") return { label: "Completed", variant: "outline", icon: Package }
   if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", variant: "default", icon: Truck }
@@ -97,7 +95,7 @@ function IncomingTab() {
   const grouped = useMemo(() => {
     const map = new Map<string, TOrderItem[]>()
     for (const item of items) {
-      const key = `${item.account_id}::${item.address}::${item.transport_option}`
+      const key = `${item.AccountID}::${item.Address}::${item.TransportOption}`
       const existing = map.get(key) ?? []
       existing.push(item)
       map.set(key, existing)
@@ -115,7 +113,7 @@ function IncomingTab() {
   }
 
   const selectAllInGroup = (groupItems: TOrderItem[]) => {
-    const groupIds = groupItems.map((i) => i.id)
+    const groupIds = groupItems.map((i) => i.ID)
     const allSelected = groupIds.every((id) => selectedIds.has(id))
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -129,21 +127,32 @@ function IncomingTab() {
   }
 
   const selectedItems = useMemo(
-    () => items.filter((i) => selectedIds.has(i.id)),
+    () => items.filter((i) => selectedIds.has(i.ID)),
     [items, selectedIds],
   )
 
   const handleConfirm = async () => {
     if (selectedIds.size === 0) return
     try {
-      await confirmMutation.mutateAsync({
+      const result = await confirmMutation.mutateAsync({
         item_ids: Array.from(selectedIds),
+        use_wallet: false,
+        payment_option: "",
         note: confirmNote || undefined,
       })
-      toast.success("Items confirmed and order created.")
       setSelectedIds(new Set())
       setShowConfirmDialog(false)
       setConfirmNote("")
+      if (result.requires_gateway_payment) {
+        if (result.gateway_url) {
+          toast.info("Redirecting to payment...")
+          window.location.href = result.gateway_url
+          return
+        }
+        toast.error("Payment URL missing — please contact support")
+        return
+      }
+      toast.success("Items confirmed and order created.")
     } catch {
       toast.error("Failed to confirm items.")
     }
@@ -233,46 +242,37 @@ function IncomingTab() {
                       className="ml-auto"
                       onClick={() => selectAllInGroup(groupItems)}
                     >
-                      {groupItems.every((i) => selectedIds.has(i.id)) ? "Deselect All" : "Select All"}
+                      {groupItems.every((i) => selectedIds.has(i.ID)) ? "Deselect All" : "Select All"}
                     </Button>
                   </div>
 
                   <div className="space-y-3">
                     {groupItems.map((item) => (
                       <div
-                        key={item.id}
+                        key={item.ID}
                         className={cn(
                           "flex items-center gap-3 p-3 rounded-lg border transition-colors min-h-28",
-                          selectedIds.has(item.id) && "border-primary bg-accent/30",
+                          selectedIds.has(item.ID) && "border-primary bg-accent/30",
                         )}
                       >
                         <Checkbox
-                          checked={selectedIds.has(item.id)}
-                          onCheckedChange={() => toggleItem(item.id)}
+                          checked={selectedIds.has(item.ID)}
+                          onCheckedChange={() => toggleItem(item.ID)}
                           className="mt-1"
                         />
                         <div className="relative h-12 w-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                          {item.resources?.[0] ? (
-                            <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
-                          ) : (
-                            <Package className="h-5 w-5 text-muted-foreground" />
-                          )}
+                          <Package className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <ProductLink spuId={item.spu_id} onClick={(e) => e.stopPropagation()}>
-                            {item.sku_name}
-                          </ProductLink>
-                          {item.note && (
-                            <p className="text-sm text-muted-foreground truncate">{item.note}</p>
+                          <p className="font-medium truncate">{item.SkuName}</p>
+                          {item.Note && (
+                            <p className="text-sm text-muted-foreground truncate">{item.Note}</p>
                           )}
                           <div className="flex items-center gap-4 mt-1 text-sm flex-wrap">
-                            <span>Qty: {item.quantity}</span>
-                            {/* TOrderItem has no currency field; fall back to VND */}
+                            <span>Qty: {item.Quantity}</span>
+                            {/* SubtotalAmount = unit_price * quantity */}
                             <span className="font-medium">
-                              <Price amount={item.unit_price} currency="VND" emphasis="native-only" />/ea
-                            </span>
-                            <span className="font-medium">
-                              <Price amount={item.unit_price * item.quantity} currency="VND" emphasis="native-only" /> total
+                              <Price amount={item.SubtotalAmount} currency="VND" emphasis="native-only" /> total
                             </span>
                           </div>
                           <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
@@ -282,7 +282,7 @@ function IncomingTab() {
                             </Badge>
                             <span className="flex items-center gap-1">
                               <Truck className="h-3 w-3" />
-                              {item.transport_option} &middot; Est. <Price amount={item.transport_cost_estimate} currency="VND" emphasis="native-only" />
+                              {item.TransportOption}
                             </span>
                           </div>
                         </div>
@@ -318,10 +318,10 @@ function IncomingTab() {
             {/* Selected Items Summary */}
             <div className="rounded-lg border bg-muted/50 p-3 space-y-1.5">
               {selectedItems.map((item) => (
-                <div key={item.id} className="flex justify-between gap-4 text-sm">
-                  <span className="min-w-0 truncate">{item.sku_name} x{item.quantity}</span>
+                <div key={item.ID} className="flex justify-between gap-4 text-sm">
+                  <span className="min-w-0 truncate">{item.SkuName} x{item.Quantity}</span>
                   <span className="font-medium flex-shrink-0">
-                    <Price amount={item.paid_amount} currency="VND" emphasis="native-only" />
+                    <Price amount={item.PaidAmount} currency="VND" emphasis="native-only" />
                   </span>
                 </div>
               ))}
@@ -329,7 +329,7 @@ function IncomingTab() {
                 <span className="text-muted-foreground">Subtotal (paid)</span>
                 <span>
                   <Price
-                    amount={selectedItems.reduce((sum, i) => sum + i.paid_amount, 0)}
+                    amount={selectedItems.reduce((sum, i) => sum + i.PaidAmount, 0)}
                     currency="VND"
                     emphasis="native-only"
                   />
@@ -343,10 +343,7 @@ function IncomingTab() {
                 <Label className="text-sm text-muted-foreground">Transport Option (chosen by buyer)</Label>
                 <div className="flex items-center gap-2 mt-1">
                   <Truck className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{selectedItems[0].transport_option}</span>
-                  <span className="text-sm text-muted-foreground">
-                    &middot; Est. <Price amount={selectedItems.reduce((sum, i) => sum + i.transport_cost_estimate, 0)} currency="VND" emphasis="native-only" />
-                  </span>
+                  <span className="font-medium">{selectedItems[0].TransportOption}</span>
                 </div>
               </div>
             )}
@@ -460,29 +457,29 @@ function ConfirmedTab() {
             const StatusIcon = status.icon
 
             return (
-              <Card key={order.id}>
+              <Card key={order.ID}>
                 <CardContent className="p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="font-medium truncate">{summarizeOrder(order.items)}</h3>
+                        <h3 className="font-medium truncate">{summarizeOrder(order.Items)}</h3>
                         <Badge variant={status.variant} className="gap-1">
                           <StatusIcon className="h-3 w-3" />
                           {status.label}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        #{order.id.slice(0, 8)} &middot; {formatDate(order.date_created)}
+                        #{order.ID.slice(0, 8)} &middot; {formatDate(order.DateCreated)}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Buyer: <AccountName id={order.buyer_id} fallback="Buyer" />
+                        Buyer: <AccountName id={order.BuyerID} fallback="Buyer" />
                       </p>
                       <p className="text-sm">
-                        {order.items.length} item{order.items.length !== 1 ? "s" : ""} |
+                        {order.Items.length} item{order.Items.length !== 1 ? "s" : ""} |
                         <span className="font-medium ml-1">
                           <Price
-                            amount={order.total}
-                            currency={order.payment?.seller_currency || "VND"}
+                            amount={order.TotalAmount}
+                            currency="VND"
                             emphasis="native-only"
                           />
                         </span>
@@ -498,7 +495,7 @@ function ConfirmedTab() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link href={`/seller/orders/${order.id}`}>
+                            <Link href={`/seller/orders/${order.ID}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </Link>
@@ -510,18 +507,14 @@ function ConfirmedTab() {
 
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex gap-2 overflow-x-auto pb-2">
-                      {order.items.slice(0, 4).map((item) => (
-                        <div key={item.id} className="relative flex-shrink-0 h-12 w-12 rounded bg-muted flex items-center justify-center">
-                          {item.resources?.[0] ? (
-                            <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
-                          ) : (
-                            <Package className="h-5 w-5 text-muted-foreground" />
-                          )}
+                      {order.Items.slice(0, 4).map((item) => (
+                        <div key={item.ID} className="relative flex-shrink-0 h-12 w-12 rounded bg-muted flex items-center justify-center">
+                          <Package className="h-5 w-5 text-muted-foreground" />
                         </div>
                       ))}
-                      {order.items.length > 4 && (
+                      {order.Items.length > 4 && (
                         <div className="flex-shrink-0 h-12 w-12 rounded bg-muted flex items-center justify-center text-sm text-muted-foreground">
-                          +{order.items.length - 4}
+                          +{order.Items.length - 4}
                         </div>
                       )}
                     </div>

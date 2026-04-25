@@ -2,72 +2,89 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { customFetchStandard } from "@/lib/queryclient/custom-fetch"
 import { useInfiniteQueryPagination } from "@/lib/queryclient/use-infinite-query"
 import { PaginationParams } from "@/lib/queryclient/response.type"
-import { Resource } from "../common/resource.type"
 
 // ===== Types =====
+// Field names match Go's encoding/json serialization of model structs (no json tags = PascalCase).
 
-export type TOrderItem = {
-  id: number
-  order_id: string | null
-  account_id: string
-  seller_id: string
-  address: string
-  sku_id: string
-  spu_id: string
-  sku_name: string
-  quantity: number
-  unit_price: number
-  paid_amount: number
-  note: string | null
-  serial_ids: string[]
-  transport_option: string
-  transport_cost_estimate: number
-  payment_id: number | null
-  date_created: string
-  date_cancelled: string | null
-  resources: Resource[]
+export type TTransaction = {
+  ID: number
+  FromID: string | null
+  ToID: string | null
+  Type: string
+  Status: string
+  Note: string
+  PaymentOption: string | null
+  WalletID: string | null
+  Data: unknown
+
+  Amount: number
+  FromCurrency: string
+  ToCurrency: string
+  ExchangeRate: string // decimal.Decimal serialized as string
+
+  DateCreated: string
+  DatePaid: string | null
+  DateExpired: string
 }
 
 export type TTransport = {
-  id: string
-  option: string
-  status: string
-  cost: number
-  data: Record<string, any>
-  date_created: string
+  ID: number
+  Option: string
+  Status: string | null
+  Data: unknown
+  DateCreated: string
 }
 
-export type TPayment = {
-  id: number
-  account_id: string
-  option: string
-  payment_method_id?: string
-  status: string
-  amount: number
-  buyer_currency?: string
-  seller_currency?: string
-  exchange_rate?: number
-  data: Record<string, any>
-  date_created: string
-  date_paid: string | null
-  date_expired: string
+export type TOrderItem = {
+  ID: number
+  OrderID: string | null
+  AccountID: string
+  SellerID: string
+  SkuID: string
+  SkuName: string
+  Address: string
+  Note: string | null
+  SerialIDs: unknown
+
+  Quantity: number
+  TransportOption: string
+  SubtotalAmount: number
+  PaidAmount: number
+  PaymentTxID: number
+
+  DateCreated: string
+  DateCancelled: string | null
+  CancelledByID: string | null
+  RefundTxID: number | null
 }
 
 export type TOrder = {
-  id: string
-  buyer_id: string
-  seller_id: string
-  transport: TTransport | null
-  payment: TPayment | null
-  address: string
-  product_cost: number
-  product_discount: number
-  transport_cost: number
-  total: number
-  note: string | null
-  data: Record<string, any>
-  date_created: string
+  ID: string
+  BuyerID: string
+  SellerID: string
+  TransportID: number
+  Address: string
+  DateCreated: string
+
+  ConfirmedByID: string
+  SellerTxID: number
+  Note: string | null
+
+  // Derived (optional loaded):
+  TotalAmount: number
+  Items: TOrderItem[]
+  Transport: TTransport | null
+  ConfirmFeeTx: TTransaction | null
+  PayoutTx: TTransaction | null
+}
+
+// BuyerCheckoutResult — field names from interface.go json tags (snake_case)
+export type TBuyerCheckoutResult = {
   items: TOrderItem[]
+  checkout_tx_ids: number[]
+  blocker_tx_id: number
+  requires_gateway_payment: boolean
+  gateway_url: string | null
 }
 
 // ===== Hooks =====
@@ -87,13 +104,7 @@ export const useBuyerCheckout = () => {
         transport_option: string
         note?: string
       }>
-    }) => customFetchStandard<{
-      items: TOrderItem[]
-      payment: TPayment | null
-      redirect_url: string | null
-      wallet_deducted: number
-      total: number
-    }>(`order/buyer/checkout`, {
+    }) => customFetchStandard<TBuyerCheckoutResult>(`order/buyer/checkout`, {
       method: 'POST',
       body: JSON.stringify(params),
     }),

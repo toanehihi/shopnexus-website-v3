@@ -13,13 +13,13 @@ const steps = [
 ]
 
 interface OrderProgressProps {
-  paymentStatus?: string | null
+  confirmFeeStatus?: string | null
   transportStatus?: string | null
 }
 
-export function OrderProgress({ paymentStatus, transportStatus }: OrderProgressProps) {
+export function OrderProgress({ confirmFeeStatus, transportStatus }: OrderProgressProps) {
   let currentStepIndex = 0
-  if (paymentStatus === "Success") currentStepIndex = 1
+  if (confirmFeeStatus === "Success") currentStepIndex = 1
   if (transportStatus === "LabelCreated") currentStepIndex = 2
   if (transportStatus === "InTransit" || transportStatus === "OutForDelivery") currentStepIndex = 3
   if (transportStatus === "Delivered") currentStepIndex = 4

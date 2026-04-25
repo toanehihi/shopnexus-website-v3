@@ -149,13 +149,17 @@ export default function CheckoutPage() {
 				})),
 			})
 
-			if (result.redirect_url) {
-				toast.success("Redirecting to payment gateway...")
-				window.location.href = result.redirect_url
-			} else {
-				toast.success("Checkout successful! Your order has been placed.")
-				router.push("/account/orders")
+			if (result.requires_gateway_payment) {
+				if (result.gateway_url) {
+					toast.info("Redirecting to payment...")
+					window.location.href = result.gateway_url
+					return
+				}
+				toast.error("Payment URL missing — please contact support")
+				return
 			}
+			toast.success("Checkout successful! Your order has been placed.")
+			router.push("/account/orders")
 		} catch (error) {
 			if (isAddressCountryMismatch(error)) {
 				setAddressMismatch(

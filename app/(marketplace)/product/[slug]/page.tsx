@@ -399,9 +399,13 @@ export default function ProductDetailPage({
 				],
 			})
 			setIsBuyNowOpen(false)
-			if (result.redirect_url) {
-				toast.success("Redirecting to payment gateway...")
-				window.location.href = result.redirect_url
+			if (result.requires_gateway_payment) {
+				if (result.gateway_url) {
+					toast.info("Redirecting to payment...")
+					window.location.href = result.gateway_url
+					return
+				}
+				toast.error("Payment URL missing — please contact support")
 				return
 			}
 			toast.success("Order placed successfully!", {

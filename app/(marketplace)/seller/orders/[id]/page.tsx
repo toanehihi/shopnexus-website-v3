@@ -2,10 +2,8 @@
 
 import { use } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { TOrder } from "@/core/order/order.buyer"
 import { useGetSellerOrder } from "@/core/order/order.seller"
-import { ProductLink } from "@/components/product/product-link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -27,11 +25,11 @@ import {
 import { Price } from "@/components/ui/price"
 import { useGetAccount } from "@/core/account/account"
 
-function summarizeOrder(items?: Array<{ sku_name: string }>): string {
+function summarizeOrder(items?: Array<{ SkuName: string }>): string {
   if (!items?.length) return "Order"
-  if (items.length === 1) return items[0].sku_name
-  if (items.length === 2) return `${items[0].sku_name}, ${items[1].sku_name}`
-  return `${items[0].sku_name} and ${items.length - 1} more`
+  if (items.length === 1) return items[0].SkuName
+  if (items.length === 2) return `${items[0].SkuName}, ${items[1].SkuName}`
+  return `${items[0].SkuName} and ${items.length - 1} more`
 }
 
 function AccountName({ id, fallback = "User" }: { id: string; fallback?: string }) {
@@ -40,12 +38,12 @@ function AccountName({ id, fallback = "User" }: { id: string; fallback?: string 
 }
 
 function getOrderDisplayStatus(order: TOrder): { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType } {
-  const ps = order.payment?.status
-  const ts = order.transport?.status
-  if (!order.payment) return { label: "Unpaid", variant: "secondary", icon: Clock }
-  if (ps === "Pending") return { label: "Awaiting Payment", variant: "secondary", icon: Clock }
-  if (ps === "Failed") return { label: "Payment Failed", variant: "destructive", icon: XCircle }
-  if (ps === "Cancelled") return { label: "Cancelled", variant: "destructive", icon: XCircle }
+  const cs = order.ConfirmFeeTx?.Status
+  const ts = order.Transport?.Status
+  if (!order.ConfirmFeeTx) return { label: "Unpaid", variant: "secondary", icon: Clock }
+  if (cs === "Pending") return { label: "Awaiting Payment", variant: "secondary", icon: Clock }
+  if (cs === "Failed") return { label: "Payment Failed", variant: "destructive", icon: XCircle }
+  if (cs === "Cancelled") return { label: "Cancelled", variant: "destructive", icon: XCircle }
   if (ts === "Delivered") return { label: "Completed", variant: "outline", icon: Package }
   if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", variant: "default", icon: Truck }
   if (ts === "Failed" || ts === "Cancelled") return { label: "Delivery Failed", variant: "destructive", icon: XCircle }
@@ -79,12 +77,12 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
   }
 
   const getCurrentStep = (order: TOrder) => {
-    const ps = order.payment?.status
-    const ts = order.transport?.status
-    if (ps === "Cancelled" || ps === "Failed") return -1
+    const cs = order.ConfirmFeeTx?.Status
+    const ts = order.Transport?.Status
+    if (cs === "Cancelled" || cs === "Failed") return -1
     if (ts === "Delivered") return 3
     if (ts === "InTransit" || ts === "OutForDelivery") return 2
-    if (ps === "Success") return 1
+    if (cs === "Success") return 1
     return 0
   }
 
@@ -140,18 +138,18 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{summarizeOrder(order.items)}</h1>
-              <p className="text-sm text-muted-foreground">#{order.id.slice(0, 8)}</p>
+              <h1 className="text-2xl font-bold">{summarizeOrder(order.Items)}</h1>
+              <p className="text-sm text-muted-foreground">#{order.ID.slice(0, 8)}</p>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
-                onClick={() => copyToClipboard(order.id)}
+                onClick={() => copyToClipboard(order.ID)}
               >
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
-            <p className="text-muted-foreground">{formatDate(order.date_created)}</p>
+            <p className="text-muted-foreground">{formatDate(order.DateCreated)}</p>
           </div>
         </div>
 
@@ -160,7 +158,7 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
             <StatusIcon className="h-3 w-3" />
             {status.label}
           </Badge>
-          {order.payment === null && (
+          {order.ConfirmFeeTx === null && (
             <Badge variant="destructive" className="font-normal">
               Unpaid
             </Badge>
@@ -221,35 +219,31 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
-                Order Items ({order.items.length})
+                Order Items ({order.Items.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {order.items.map((item) => (
+              {order.Items.map((item) => (
                 <div
-                  key={item.id}
+                  key={item.ID}
                   className="flex gap-4 p-4 bg-muted/50 rounded-lg"
                 >
                   <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                    {item.resources?.[0] ? (
-                      <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
-                    ) : (
-                      <Package className="h-6 w-6 text-muted-foreground" />
-                    )}
+                    <Package className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <ProductLink spuId={item.spu_id} onClick={(e) => e.stopPropagation()}>{item.sku_name}</ProductLink>
-                    {item.note && (
+                    <p className="font-medium truncate">{item.SkuName}</p>
+                    {item.Note && (
                       <p className="text-sm text-muted-foreground truncate">
-                        {item.note}
+                        {item.Note}
                       </p>
                     )}
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-sm">Qty: {item.quantity}</span>
+                      <span className="text-sm">Qty: {item.Quantity}</span>
                       <span className="font-medium">
                         <Price
-                          amount={item.unit_price * item.quantity}
-                          currency={order.payment?.seller_currency || "VND"}
+                          amount={item.SubtotalAmount}
+                          currency="VND"
                           emphasis="native-only"
                         />
                       </span>
@@ -261,13 +255,13 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
           </Card>
 
           {/* Order Note */}
-          {order.note && (
+          {order.Note && (
             <Card>
               <CardHeader>
                 <CardTitle>Order Note</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{order.note}</p>
+                <p className="text-muted-foreground">{order.Note}</p>
               </CardContent>
             </Card>
           )}
@@ -284,8 +278,8 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium"><AccountName id={order.buyer_id} fallback="Buyer" /></p>
-              <p className="text-sm text-muted-foreground">#{order.buyer_id.slice(0, 8)}</p>
+              <p className="font-medium"><AccountName id={order.BuyerID} fallback="Buyer" /></p>
+              <p className="text-sm text-muted-foreground">#{order.BuyerID.slice(0, 8)}</p>
             </CardContent>
           </Card>
 
@@ -298,12 +292,12 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">{order.address}</p>
+              <p className="text-muted-foreground">{order.Address}</p>
             </CardContent>
           </Card>
 
           {/* Transport Info */}
-          {order.transport && (
+          {order.Transport && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -313,10 +307,10 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  ID: {order.transport.id.slice(0, 8)}
+                  ID: {String(order.Transport.ID).slice(0, 8)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Status: {order.transport.status}
+                  Status: {order.Transport.Status}
                 </p>
               </CardContent>
             </Card>
@@ -331,15 +325,17 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {order.payment ? (
+              {order.ConfirmFeeTx ? (
                 <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Method</span>
-                    <span>{order.payment.option}</span>
-                  </div>
+                  {order.ConfirmFeeTx.PaymentOption && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Method</span>
+                      <span>{order.ConfirmFeeTx.PaymentOption}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Status</span>
-                    <Badge variant="outline">{order.payment.status}</Badge>
+                    <Badge variant="outline">{order.ConfirmFeeTx.Status}</Badge>
                   </div>
                 </>
               ) : (
@@ -354,45 +350,13 @@ export default function SellerOrderDetailPage({ params }: { params: Promise<{ id
               <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>
-                  <Price
-                    amount={order.product_cost}
-                    currency={order.payment?.seller_currency || "VND"}
-                    emphasis="native-only"
-                  />
-                </span>
-              </div>
-              {order.product_discount > 0 && (
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>Discount</span>
-                  <span>
-                    -<Price
-                      amount={order.product_discount}
-                      currency={order.payment?.seller_currency || "VND"}
-                      emphasis="native-only"
-                    />
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Shipping</span>
-                <span>
-                  <Price
-                    amount={order.transport_cost}
-                    currency={order.payment?.seller_currency || "VND"}
-                    emphasis="native-only"
-                  />
-                </span>
-              </div>
               <Separator className="my-2" />
               <div className="flex justify-between font-medium">
                 <span>Total</span>
                 <span>
                   <Price
-                    amount={order.total}
-                    currency={order.payment?.seller_currency || "VND"}
+                    amount={order.TotalAmount}
+                    currency="VND"
                     emphasis="native-only"
                   />
                 </span>

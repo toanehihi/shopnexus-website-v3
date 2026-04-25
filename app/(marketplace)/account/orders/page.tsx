@@ -1,7 +1,6 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import {
   useListBuyerPendingItems,
@@ -10,7 +9,6 @@ import {
   TOrderItem,
   TOrder,
 } from "@/core/order/order.buyer"
-import { ProductLink } from "@/components/product/product-link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -51,19 +49,15 @@ function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: 
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
           <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
-            {item.resources?.[0] ? (
-              <Image src={item.resources[0].url} alt={item.sku_name} fill className="object-cover rounded" />
-            ) : (
-              <Package className="h-6 w-6 text-muted-foreground" />
-            )}
+            <Package className="h-6 w-6 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <ProductLink spuId={item.spu_id}>{item.sku_name}</ProductLink>
+            <p className="font-medium truncate">{item.SkuName}</p>
             <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
-              Qty: {item.quantity} x {fmt(item.unit_price)}
+              Qty: {item.Quantity} &middot; {fmt(item.SubtotalAmount)} total
             </p>
-            {item.note && (
-              <p className="text-sm text-muted-foreground truncate">{item.note}</p>
+            {item.Note && (
+              <p className="text-sm text-muted-foreground truncate">{item.Note}</p>
             )}
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
@@ -72,10 +66,10 @@ function PendingItemCard({ item, onCancel }: { item: TOrderItem; onCancel: (id: 
               {badgeLabel}
             </Badge>
             <span className="text-sm font-medium">
-              {fmt(item.unit_price * item.quantity)}
+              {fmt(item.PaidAmount)}
             </span>
-            {!item.order_id && !item.date_cancelled && (
-              <Button variant="ghost" size="sm" className="text-destructive h-7 px-2" onClick={() => onCancel(item.id)}>
+            {!item.OrderID && !item.DateCancelled && (
+              <Button variant="ghost" size="sm" className="text-destructive h-7 px-2" onClick={() => onCancel(item.ID)}>
                 Cancel
               </Button>
             )}
@@ -174,7 +168,7 @@ function PendingTab() {
           <h3 className="text-sm font-medium text-muted-foreground">Awaiting Seller Approval</h3>
           <div className="space-y-3">
             {pendingItems.map((item) => (
-              <PendingItemCard key={item.id} item={item} onCancel={setCancelId} />
+              <PendingItemCard key={item.ID} item={item} onCancel={setCancelId} />
             ))}
           </div>
           {hasMorePending && (
@@ -226,13 +220,13 @@ function PendingTab() {
 // ===== Main Page =====
 
 function isCompletedOrder(order: TOrder): boolean {
-  return order.transport?.status === "Delivered"
+  return order.Transport?.Status === "Delivered"
 }
 
 function isCancelledOrder(order: TOrder): boolean {
-  const ps = order.payment?.status
-  const ts = order.transport?.status
-  return ps === "Cancelled" || ps === "Failed" || ts === "Failed" || ts === "Cancelled"
+  const ts = order.Transport?.Status
+  const cs = order.ConfirmFeeTx?.Status
+  return cs === "Cancelled" || cs === "Failed" || ts === "Failed" || ts === "Cancelled"
 }
 
 export default function OrdersPage() {
