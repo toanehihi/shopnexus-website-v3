@@ -52,8 +52,7 @@ export function CreateRefundDialog({ order, open, onOpenChange }: CreateRefundDi
     selectedItemId !== null &&
     reason.trim().length > 0 &&
     reason.trim().length <= 500 &&
-    returnTransportOption.trim().length > 0 &&
-    (method !== RefundMethod.DropOff || true) // address is optional for DropOff
+    returnTransportOption.trim().length > 0
 
   const handleSubmit = async () => {
     if (!canSubmit || selectedItemId === null) return

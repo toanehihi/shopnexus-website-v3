@@ -55,7 +55,10 @@ function StageIndicator({ refund }: { refund: TRefund }) {
 
 export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund }) {
   const router = useRouter()
-  const config = statusConfig[refund.Status]
+  const config = statusConfig[refund.Status] ?? {
+    label: refund.Status as string,
+    className: "",
+  }
 
   return (
     <Card>

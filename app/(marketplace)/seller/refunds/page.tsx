@@ -202,6 +202,8 @@ export default function SellerRefundsPage() {
   const [activeTab, setActiveTab] = useState("all")
   const [rejectDialog, setRejectDialog] = useState<RejectDialogState>(null)
   const [rejectionNote, setRejectionNote] = useState("")
+  const [pendingAcceptId, setPendingAcceptId] = useState<string | null>(null)
+  const [pendingApproveId, setPendingApproveId] = useState<string | null>(null)
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useListRefundsSeller({
@@ -215,18 +217,26 @@ export default function SellerRefundsPage() {
 
   const refunds = data?.pages.flatMap((page) => page.data) ?? []
 
-  const handleAccept = (id: string) => {
-    acceptMutation.mutate(
-      { id },
-      { onError: () => toast.error("Failed to accept return.") },
-    )
+  const handleAccept = async (id: string) => {
+    setPendingAcceptId(id)
+    try {
+      await acceptMutation.mutateAsync({ id })
+    } catch {
+      toast.error("Failed to accept return.")
+    } finally {
+      setPendingAcceptId(null)
+    }
   }
 
-  const handleApprove = (id: string) => {
-    approveMutation.mutate(
-      { id },
-      { onError: () => toast.error("Failed to approve refund.") },
-    )
+  const handleApprove = async (id: string) => {
+    setPendingApproveId(id)
+    try {
+      await approveMutation.mutateAsync({ id })
+    } catch {
+      toast.error("Failed to approve refund.")
+    } finally {
+      setPendingApproveId(null)
+    }
   }
 
   const handleRejectSubmit = async () => {
@@ -303,8 +313,8 @@ export default function SellerRefundsPage() {
               onAccept={handleAccept}
               onApprove={handleApprove}
               onRejectOpen={setRejectDialog}
-              acceptPending={acceptMutation.isPending}
-              approvePending={approveMutation.isPending}
+              acceptPending={pendingAcceptId === refund.ID}
+              approvePending={pendingApproveId === refund.ID}
             />
           ))}
 
