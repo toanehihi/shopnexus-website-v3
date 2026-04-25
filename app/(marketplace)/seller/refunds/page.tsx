@@ -1,13 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
-import Image from "next/image"
-import { useListRefundsSeller, useConfirmRefundSeller, TRefund, RefundMethod } from "@/core/order/refund.seller"
+import {
+  useListRefundsSeller,
+  useAcceptRefundStage1,
+  useApproveRefundStage2,
+  useRejectRefund,
+} from "@/core/order/refund.seller"
+import { TRefund, RefundMethod } from "@/core/order/refund.buyer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -19,74 +24,229 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Search,
-  MoreVertical,
-  Eye,
   CheckCircle,
   XCircle,
   RotateCcw,
-  Package,
   Truck,
   MapPin,
   Loader2,
   Clock,
   AlertCircle,
 } from "lucide-react"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
-type RefundStatus = "Pending" | "Approved" | "Rejected" | "Completed"
+type RejectDialogState = {
+  refundId: string
+  stage: 1 | 2
+} | null
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
-  Pending: { label: "Pending", variant: "secondary", icon: Clock },
-  Approved: { label: "Approved", variant: "default", icon: CheckCircle },
-  Rejected: { label: "Rejected", variant: "destructive", icon: XCircle },
-  Completed: { label: "Completed", variant: "outline", icon: Package },
+const statusBadge: Record<string, { label: string; className: string }> = {
+  Pending: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
+  Processing: { label: "Processing", className: "bg-blue-100 text-blue-800" },
+  Success: { label: "Refunded", className: "bg-green-100 text-green-800" },
+  Failed: { label: "Rejected", className: "bg-red-100 text-red-800" },
+}
+
+function RefundRow({
+  refund,
+  onAccept,
+  onApprove,
+  onRejectOpen,
+  acceptPending,
+  approvePending,
+}: {
+  refund: TRefund
+  onAccept: (id: string) => void
+  onApprove: (id: string) => void
+  onRejectOpen: (state: RejectDialogState) => void
+  acceptPending: boolean
+  approvePending: boolean
+}) {
+  const badge = statusBadge[refund.Status] ?? statusBadge.Pending
+  const isStage1Actionable = refund.Status === "Pending" && refund.AcceptedByID === null
+  const isStage2Actionable =
+    refund.Status === "Processing" &&
+    refund.AcceptedByID !== null &&
+    refund.ApprovedByID === null
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-medium text-sm">#{refund.ID.slice(0, 8)}</h3>
+              <Badge
+                variant="secondary"
+                className={cn("font-normal", badge.className)}
+              >
+                {badge.label}
+              </Badge>
+              <Badge variant="outline" className="gap-1">
+                {refund.Method === RefundMethod.PickUp ? (
+                  <>
+                    <Truck className="h-3 w-3" />
+                    Pick Up
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="h-3 w-3" />
+                    Drop Off
+                  </>
+                )}
+              </Badge>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Item #{refund.OrderItemID} &middot;{" "}
+              {new Date(refund.DateCreated).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </p>
+
+            <div className="flex items-start gap-2 text-sm">
+              <AlertCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <p className="text-muted-foreground">{refund.Reason}</p>
+            </div>
+
+            {refund.Address && (
+              <div className="flex items-start gap-2 text-sm">
+                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-muted-foreground">{refund.Address}</p>
+              </div>
+            )}
+
+            {refund.Status === "Failed" && (
+              <p className="text-sm text-muted-foreground">
+                Rejected — {refund.RejectionNote}
+              </p>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isStage1Actionable && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => onAccept(refund.ID)}
+                  disabled={acceptPending}
+                >
+                  {acceptPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Accept return
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRejectOpen({ refundId: refund.ID, stage: 1 })}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Reject
+                </Button>
+              </>
+            )}
+
+            {isStage2Actionable && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => onApprove(refund.ID)}
+                  disabled={approvePending}
+                >
+                  {approvePending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Approve refund
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRejectOpen({ refundId: refund.ID, stage: 2 })}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Reject
+                </Button>
+              </>
+            )}
+
+            {refund.Status === "Success" && (
+              <Badge
+                variant="secondary"
+                className="bg-green-100 text-green-800 font-normal"
+              >
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Refunded
+              </Badge>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function SellerRefundsPage() {
-  const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
-  const [selectedRefund, setSelectedRefund] = useState<TRefund | null>(null)
-  const [actionType, setActionType] = useState<"approve" | null>(null)
+  const [rejectDialog, setRejectDialog] = useState<RejectDialogState>(null)
+  const [rejectionNote, setRejectionNote] = useState("")
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useListRefundsSeller({
-    limit: 20,
-    ...(activeTab !== "all" ? { status: activeTab } : {}),
-  })
-  const confirmMutation = useConfirmRefundSeller()
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useListRefundsSeller({
+      limit: 20,
+      ...(activeTab !== "all" ? { status: activeTab } : {}),
+    })
+
+  const acceptMutation = useAcceptRefundStage1()
+  const approveMutation = useApproveRefundStage2()
+  const rejectMutation = useRejectRefund()
 
   const refunds = data?.pages.flatMap((page) => page.data) ?? []
 
-  const filteredRefunds = refunds.filter((refund) =>
-    refund.id.toLowerCase().includes(search.toLowerCase()) ||
-    refund.order_id.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const handleAction = async () => {
-    if (!selectedRefund || actionType !== "approve") return
-
-    await confirmMutation.mutateAsync({ id: selectedRefund.id })
-
-    setSelectedRefund(null)
-    setActionType(null)
+  const handleAccept = (id: string) => {
+    acceptMutation.mutate(
+      { id },
+      { onError: () => toast.error("Failed to accept return.") },
+    )
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+  const handleApprove = (id: string) => {
+    approveMutation.mutate(
+      { id },
+      { onError: () => toast.error("Failed to approve refund.") },
+    )
   }
 
-  const getStatusFromString = (status: any): string => {
-    if (typeof status === "string") return status
-    return "Pending"
+  const handleRejectSubmit = async () => {
+    if (!rejectDialog || !rejectionNote.trim()) return
+
+    rejectMutation.mutate(
+      {
+        id: rejectDialog.refundId,
+        stage: rejectDialog.stage,
+        rejection_note: rejectionNote.trim(),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Refund rejected.")
+          setRejectDialog(null)
+          setRejectionNote("")
+        },
+        onError: () => toast.error("Failed to reject refund."),
+      },
+    )
   }
 
   return (
@@ -99,162 +259,55 @@ export default function SellerRefundsPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">All Refunds</TabsTrigger>
-          <TabsTrigger value="Pending">Pending</TabsTrigger>
-          <TabsTrigger value="Approved">Approved</TabsTrigger>
-          <TabsTrigger value="Completed">Completed</TabsTrigger>
-          <TabsTrigger value="Rejected">Rejected</TabsTrigger>
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="Pending">
+            <Clock className="h-3.5 w-3.5 mr-1" />
+            Pending
+          </TabsTrigger>
+          <TabsTrigger value="Processing">Processing</TabsTrigger>
+          <TabsTrigger value="Success">Refunded</TabsTrigger>
+          <TabsTrigger value="Failed">Rejected</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by refund or order ID..."
-          className="pl-10 max-w-md"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
-      {/* Refunds List */}
+      {/* Refund List */}
       {isLoading ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
             <Card key={i}>
-              <CardContent className="p-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-5 w-20" />
-                  </div>
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-4 w-full" />
+              <CardContent className="p-4 space-y-3">
+                <div className="flex justify-between">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-5 w-20" />
                 </div>
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-full" />
               </CardContent>
             </Card>
           ))}
         </div>
-      ) : filteredRefunds.length === 0 ? (
+      ) : refunds.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <RotateCcw className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No refunds found</h3>
-            <p className="text-muted-foreground">
-              {search ? "Try a different search term" : "Refund requests will appear here"}
-            </p>
+            <p className="text-muted-foreground">Refund requests will appear here</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {filteredRefunds.map((refund) => {
-            const statusStr = getStatusFromString(refund.status)
-            const status = statusConfig[statusStr] || statusConfig.Pending
-            const StatusIcon = status.icon
+          {refunds.map((refund) => (
+            <RefundRow
+              key={refund.ID}
+              refund={refund}
+              onAccept={handleAccept}
+              onApprove={handleApprove}
+              onRejectOpen={setRejectDialog}
+              acceptPending={acceptMutation.isPending}
+              approvePending={approveMutation.isPending}
+            />
+          ))}
 
-            return (
-              <Card key={refund.id}>
-                <CardContent className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium">Refund request</h3>
-                        <Badge variant={status.variant} className="gap-1">
-                          <StatusIcon className="h-3 w-3" />
-                          {status.label}
-                        </Badge>
-                        <Badge variant="outline" className="gap-1">
-                          {refund.method === RefundMethod.PickUp ? (
-                            <>
-                              <Truck className="h-3 w-3" />
-                              Pick Up
-                            </>
-                          ) : (
-                            <>
-                              <MapPin className="h-3 w-3" />
-                              Drop Off
-                            </>
-                          )}
-                        </Badge>
-                      </div>
-
-                      <p className="text-sm text-muted-foreground">
-                        #{refund.id.slice(0, 8)} &middot; Order #{refund.order_id.slice(0, 8)} &middot; {formatDate(refund.date_created)}
-                      </p>
-
-                      <div className="flex items-start gap-2 text-sm">
-                        <AlertCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                        <p className="text-muted-foreground">{refund.reason}</p>
-                      </div>
-
-                      {refund.address && (
-                        <div className="flex items-start gap-2 text-sm">
-                          <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                          <p className="text-muted-foreground">{refund.address}</p>
-                        </div>
-                      )}
-
-                      {refund.resources && refund.resources.length > 0 && (
-                        <div className="flex gap-2 mt-2">
-                          {refund.resources.slice(0, 3).map((resource, idx) => (
-                            <div
-                              key={idx}
-                              className="relative h-12 w-12 rounded bg-muted flex items-center justify-center overflow-hidden"
-                            >
-                              <Image
-                                src={resource.url}
-                                alt="Evidence"
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-                          ))}
-                          {refund.resources.length > 3 && (
-                            <div className="h-12 w-12 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
-                              +{refund.resources.length - 3}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {statusStr === "Pending" && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedRefund(refund)
-                              setActionType("approve")
-                            }}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </Button>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/seller/orders/${refund.order_id}`}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Order
-                            </Link>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-
-          {/* Load More */}
           {hasNextPage && (
             <div className="text-center pt-4">
               <Button
@@ -276,33 +329,61 @@ export default function SellerRefundsPage() {
         </div>
       )}
 
-      {/* Action Confirmation Dialog */}
-      <Dialog open={!!selectedRefund && !!actionType} onOpenChange={() => { setSelectedRefund(null); setActionType(null) }}>
+      {/* Reject Dialog */}
+      <Dialog
+        open={rejectDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRejectDialog(null)
+            setRejectionNote("")
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Approve Refund</DialogTitle>
+            <DialogTitle>Reject Refund</DialogTitle>
             <DialogDescription>
-              Are you sure you want to approve refund #{selectedRefund?.id.slice(0, 8)}? This will initiate the refund process.
+              {rejectDialog?.stage === 1
+                ? "Reject the return request (stage 1). The buyer will not need to ship the item back."
+                : "Reject the refund after return (stage 2). Provide a reason for the rejection."}
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <Label htmlFor="rejection-note" className="font-medium">
+              Rejection reason <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="rejection-note"
+              value={rejectionNote}
+              onChange={(e) => setRejectionNote(e.target.value)}
+              placeholder="Explain why this refund is being rejected..."
+              rows={3}
+            />
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSelectedRefund(null); setActionType(null) }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectDialog(null)
+                setRejectionNote("")
+              }}
+            >
               Cancel
             </Button>
             <Button
-              onClick={handleAction}
-              disabled={confirmMutation.isPending}
+              variant="destructive"
+              onClick={handleRejectSubmit}
+              disabled={!rejectionNote.trim() || rejectMutation.isPending}
             >
-              {confirmMutation.isPending ? (
+              {rejectMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
+                  Submitting...
                 </>
               ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve Refund
-                </>
+                "Submit reject"
               )}
             </Button>
           </DialogFooter>

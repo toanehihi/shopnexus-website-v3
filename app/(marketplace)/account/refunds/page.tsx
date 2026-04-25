@@ -11,7 +11,7 @@ export default function RefundsPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useListRefunds({ limit: 10 })
+  } = useListRefunds({ limit: 20 })
 
   const refunds = useMemo(() => {
     return refundsData?.pages.flatMap((page) => page.data) ?? []

@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 import { useCreateRefund, RefundMethod } from "@/core/order/refund.buyer"
-import { useListContacts } from "@/core/account/contact"
-import { ImageUpload, type UploadedImage } from "@/components/ui/image-upload"
+import { useListServiceOption } from "@/core/common/option"
+import { type TOrder, type TOrderItem } from "@/core/order/order.buyer"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
@@ -28,43 +29,51 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 interface CreateRefundDialogProps {
-  orderId: string
+  order: TOrder
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function CreateRefundDialog({ orderId, open, onOpenChange }: CreateRefundDialogProps) {
+export function CreateRefundDialog({ order, open, onOpenChange }: CreateRefundDialogProps) {
   const createRefund = useCreateRefund()
-  const { data: contacts } = useListContacts()
+  const { data: transportOptions } = useListServiceOption({ category: "transport" })
 
+  const items: TOrderItem[] = order.Items ?? []
+
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(
+    items.length === 1 ? items[0].ID : null,
+  )
   const [method, setMethod] = useState<RefundMethod>(RefundMethod.DropOff)
   const [reason, setReason] = useState("")
-  const [selectedContactId, setSelectedContactId] = useState("")
-  const [evidence, setEvidence] = useState<UploadedImage[]>([])
+  const [address, setAddress] = useState("")
+  const [returnTransportOption, setReturnTransportOption] = useState("")
 
-  const selectedContact = contacts?.find((c) => c.id === selectedContactId)
-  const returnAddress = method === RefundMethod.PickUp ? selectedContact?.address ?? null : null
-
-  const canSubmit = reason.trim().length > 0 && (method !== RefundMethod.PickUp || !!selectedContactId)
+  const canSubmit =
+    selectedItemId !== null &&
+    reason.trim().length > 0 &&
+    reason.trim().length <= 500 &&
+    returnTransportOption.trim().length > 0 &&
+    (method !== RefundMethod.DropOff || true) // address is optional for DropOff
 
   const handleSubmit = async () => {
-    if (!canSubmit) return
+    if (!canSubmit || selectedItemId === null) return
 
     try {
       await createRefund.mutateAsync({
-        order_id: orderId,
+        order_item_id: selectedItemId,
         method,
         reason: reason.trim(),
-        address: returnAddress,
-        resource_ids: evidence.map((e) => e.id),
+        address: method === RefundMethod.DropOff && address.trim() ? address.trim() : null,
+        return_transport_option: returnTransportOption.trim(),
       })
-      toast.success("Refund request submitted.")
+      toast.success("Refund request submitted")
       onOpenChange(false)
       // Reset form
+      setSelectedItemId(items.length === 1 ? items[0].ID : null)
       setMethod(RefundMethod.DropOff)
       setReason("")
-      setSelectedContactId("")
-      setEvidence([])
+      setAddress("")
+      setReturnTransportOption("")
     } catch {
       toast.error("Failed to submit refund request.")
     }
@@ -79,11 +88,40 @@ export function CreateRefundDialog({ orderId, open, onOpenChange }: CreateRefund
             Request Refund
           </DialogTitle>
           <DialogDescription>
-            Describe the issue and choose a return method. The seller will review your request.
+            Choose the item to refund, return method, and describe the issue.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {/* Item Picker — hidden when only one item */}
+          {items.length > 1 && (
+            <div className="space-y-2">
+              <Label className="font-medium">Select Item to Refund</Label>
+              <RadioGroup
+                value={selectedItemId?.toString() ?? ""}
+                onValueChange={(v) => setSelectedItemId(Number(v))}
+                className="space-y-2"
+              >
+                {items.map((item) => (
+                  <Label
+                    key={item.ID}
+                    htmlFor={`item-${item.ID}`}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                      selectedItemId === item.ID && "border-primary bg-accent/30",
+                    )}
+                  >
+                    <RadioGroupItem value={item.ID.toString()} id={`item-${item.ID}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{item.SkuName}</p>
+                      <p className="text-xs text-muted-foreground">Qty: {item.Quantity}</p>
+                    </div>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+          )}
+
           {/* Return Method */}
           <div className="space-y-2">
             <Label className="font-medium">Return Method</Label>
@@ -96,7 +134,7 @@ export function CreateRefundDialog({ orderId, open, onOpenChange }: CreateRefund
                 htmlFor="method-dropoff"
                 className={cn(
                   "flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
-                  method === RefundMethod.DropOff && "border-primary bg-accent/30"
+                  method === RefundMethod.DropOff && "border-primary bg-accent/30",
                 )}
               >
                 <RadioGroupItem value={RefundMethod.DropOff} id="method-dropoff" />
@@ -109,7 +147,7 @@ export function CreateRefundDialog({ orderId, open, onOpenChange }: CreateRefund
                 htmlFor="method-pickup"
                 className={cn(
                   "flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
-                  method === RefundMethod.PickUp && "border-primary bg-accent/30"
+                  method === RefundMethod.PickUp && "border-primary bg-accent/30",
                 )}
               >
                 <RadioGroupItem value={RefundMethod.PickUp} id="method-pickup" />
@@ -121,31 +159,48 @@ export function CreateRefundDialog({ orderId, open, onOpenChange }: CreateRefund
             </RadioGroup>
           </div>
 
-          {/* Return Address (only for PickUp) */}
-          {method === RefundMethod.PickUp && (
+          {/* Address — shown only for DropOff */}
+          {method === RefundMethod.DropOff && (
             <div className="space-y-2">
-              <Label className="font-medium flex items-center gap-1">
+              <Label htmlFor="refund-address" className="font-medium flex items-center gap-1">
                 <MapPin className="h-4 w-4" />
-                Pickup Address
+                Drop-off Address (optional)
               </Label>
-              {contacts && contacts.length > 0 ? (
-                <Select value={selectedContactId} onValueChange={setSelectedContactId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an address" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {contacts.map((contact) => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.full_name} — {contact.address}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="text-sm text-muted-foreground">No saved addresses. Please add one first.</p>
-              )}
+              <Textarea
+                id="refund-address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter the drop-off address..."
+                rows={2}
+              />
             </div>
           )}
+
+          {/* Return Transport Option */}
+          <div className="space-y-2">
+            <Label className="font-medium">Return Transport Option</Label>
+            {transportOptions && transportOptions.length > 0 ? (
+              <Select value={returnTransportOption} onValueChange={setReturnTransportOption}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a transport option" />
+                </SelectTrigger>
+                <SelectContent>
+                  {transportOptions.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.method}>
+                      {opt.name}
+                      {opt.description ? ` — ${opt.description}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={returnTransportOption}
+                onChange={(e) => setReturnTransportOption(e.target.value)}
+                placeholder="e.g. standard, express"
+              />
+            )}
+          </div>
 
           {/* Reason */}
           <div className="space-y-2">
@@ -159,18 +214,6 @@ export function CreateRefundDialog({ orderId, open, onOpenChange }: CreateRefund
               rows={3}
             />
             <p className="text-xs text-muted-foreground text-right">{reason.length}/500</p>
-          </div>
-
-          {/* Evidence Photos */}
-          <div className="space-y-2">
-            <Label className="font-medium">Evidence (optional)</Label>
-            <p className="text-xs text-muted-foreground mb-2">Upload photos or screenshots to support your request.</p>
-            <ImageUpload
-              value={evidence}
-              onChange={setEvidence}
-              maxFiles={5}
-              maxSizeInMB={5}
-            />
           </div>
         </div>
 

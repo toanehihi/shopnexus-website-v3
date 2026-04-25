@@ -152,7 +152,7 @@ export default function OrderDetailPage({
 			</div>
 
 			<CreateRefundDialog
-				orderId={order.ID}
+				order={order}
 				open={showRefundDialog}
 				onOpenChange={setShowRefundDialog}
 			/>

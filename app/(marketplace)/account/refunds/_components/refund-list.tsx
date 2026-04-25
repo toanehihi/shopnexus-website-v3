@@ -66,7 +66,7 @@ export function RefundList({
   return (
     <div className="space-y-4">
       {refunds.map((refund) => (
-        <RefundCard key={refund.id} refund={refund} />
+        <RefundCard key={refund.ID} refund={refund} />
       ))}
 
       {hasNextPage && (
