@@ -20,15 +20,43 @@ import { useSignOut } from "@/core/account/auth"
 import { useUnreadCount } from "@/core/account/notification"
 import { CartSheet } from "@/components/cart/cart-sheet"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+
+function HeaderSearchForm() {
+	const searchParams = useSearchParams()
+	const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "")
+	const router = useRouter()
+
+	const handleSearch = (e: React.FormEvent) => {
+		e.preventDefault()
+		const q = searchQuery.trim()
+		router.push(q ? `/search?q=${encodeURIComponent(q)}` : "/search")
+	}
+
+	return (
+		<form
+			onSubmit={handleSearch}
+			className="hidden md:flex flex-1 max-w-md mx-4"
+		>
+			<div className="relative w-full">
+				<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+				<Input
+					type="search"
+					placeholder="Search products..."
+					className="pl-10 w-full"
+					value={searchQuery}
+					onChange={(e) => setSearchQuery(e.target.value)}
+				/>
+			</div>
+		</form>
+	)
+}
 
 export function Header() {
 	const { data: cart } = useGetCart()
 	const { data: user, isLoading: isLoadingUser } = useGetMe()
 	const signOut = useSignOut()
-	const searchParams = useSearchParams()
-	const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "")
 	const [isCartOpen, setIsCartOpen] = useState(false)
 	const router = useRouter()
 
@@ -39,12 +67,6 @@ export function Header() {
 	const handleSignOut = async () => {
 		await signOut.mutateAsync()
 		router.push("/")
-	}
-
-	const handleSearch = (e: React.FormEvent) => {
-		e.preventDefault()
-		const q = searchQuery.trim()
-		router.push(q ? `/search?q=${encodeURIComponent(q)}` : "/search")
 	}
 
 	return (
@@ -128,21 +150,9 @@ export function Header() {
 					</nav>
 
 					{/* Search Bar */}
-					<form
-						onSubmit={handleSearch}
-						className="hidden md:flex flex-1 max-w-md mx-4"
-					>
-						<div className="relative w-full">
-							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-							<Input
-								type="search"
-								placeholder="Search products..."
-								className="pl-10 w-full"
-								value={searchQuery}
-								onChange={(e) => setSearchQuery(e.target.value)}
-							/>
-						</div>
-					</form>
+					<Suspense fallback={<div className="h-10 flex-1 max-w-md" />}>
+						<HeaderSearchForm />
+					</Suspense>
 
 					{/* Actions */}
 					<div className="flex items-center gap-2">
