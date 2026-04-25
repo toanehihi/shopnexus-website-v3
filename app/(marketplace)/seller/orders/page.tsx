@@ -479,7 +479,7 @@ function ConfirmedTab() {
                         <span className="font-medium ml-1">
                           <Price
                             amount={order.TotalAmount}
-                            currency="VND"
+                            currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
                             emphasis="native-only"
                           />
                         </span>
