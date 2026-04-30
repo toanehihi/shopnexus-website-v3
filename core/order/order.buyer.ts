@@ -122,8 +122,8 @@ export const useBuyerCheckout = () => {
 export const useListBuyerPendingItems = (params: PaginationParams) =>
   useInfiniteQueryPagination<TOrderItem>(
     ['order', 'buyer', 'pending-items'],
-    'order/buyer/pending',
-    params
+    'order/buyer/pending-items',
+    params,
   )
 
 export const useCancelBuyerPending = () => {
@@ -131,11 +131,16 @@ export const useCancelBuyerPending = () => {
   return useMutation({
     mutationKey: ['order', 'buyer', 'pending-items', 'cancel'],
     mutationFn: (id: number) =>
-      customFetchStandard<void>(`order/buyer/pending/${id}`, {
+      customFetchStandard<void>(`order/buyer/pending-items/${id}`, {
         method: 'DELETE',
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['order', 'buyer', 'pending-items'] })
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['order', 'buyer', 'pending-items'] }),
+        qc.invalidateQueries({ queryKey: ['order', 'buyer', 'cancelled-items'] }),
+        qc.invalidateQueries({ queryKey: ['order', 'buyer', 'pending-orders'] }),
+        qc.invalidateQueries({ queryKey: ['order', 'buyer', 'cancelled-orders'] }),
+      ])
     },
   })
 }
@@ -144,23 +149,34 @@ export const useCancelBuyerPending = () => {
 export const useGetBuyerOrder = (id: string) =>
   useQuery({
     queryKey: ['order', id],
-    queryFn: () => customFetchStandard<TOrder>(`order/buyer/confirmed/${id}`),
+    queryFn: () => customFetchStandard<TOrder>(`order/buyer/orders/${id}`),
     enabled: !!id,
   })
 
-export const useListBuyerConfirmed = (params: PaginationParams) =>
+export const useListBuyerPendingOrders = (params: PaginationParams) =>
   useInfiniteQueryPagination<TOrder>(
-    ['order', 'buyer', 'confirmed'],
-    'order/buyer/confirmed',
-    params
+    ['order', 'buyer', 'pending-orders'],
+    'order/buyer/pending-orders',
+    params,
   )
 
-export const useGetBuyerOverview = () => {
-  const pending = useListBuyerPendingItems({ limit: 20 })
-  const confirmed = useListBuyerConfirmed({ limit: 20 })
-  return {
-    pendingItems: pending.data?.pages.flatMap(p => p.data) ?? [],
-    orders: confirmed.data?.pages.flatMap(p => p.data) ?? [],
-    isLoading: pending.isLoading || confirmed.isLoading,
-  }
-}
+export const useListBuyerCompletedOrders = (params: PaginationParams) =>
+  useInfiniteQueryPagination<TOrder>(
+    ['order', 'buyer', 'completed-orders'],
+    'order/buyer/completed-orders',
+    params,
+  )
+
+export const useListBuyerCancelledOrders = (params: PaginationParams) =>
+  useInfiniteQueryPagination<TOrder>(
+    ['order', 'buyer', 'cancelled-orders'],
+    'order/buyer/cancelled-orders',
+    params,
+  )
+
+export const useListBuyerCancelledItems = (params: PaginationParams) =>
+  useInfiniteQueryPagination<TOrderItem>(
+    ['order', 'buyer', 'cancelled-items'],
+    'order/buyer/cancelled-items',
+    params,
+  )
