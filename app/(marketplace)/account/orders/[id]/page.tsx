@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, MapPin, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { isCancelledOrder } from "@/lib/order-status"
 import { OrderDetailSkeleton } from "./_components/order-detail-skeleton"
 import { OrderProgress } from "./_components/order-progress"
 import { OrderItemsCard } from "./_components/order-items-card"
@@ -34,6 +33,13 @@ function getOrderDisplayStatus(order: TOrder): { label: string; color: string } 
 	if (ts === "InTransit" || ts === "OutForDelivery") return { label: "Shipping", color: "bg-purple-100 text-purple-800" }
 	if (ts === "Failed" || ts === "Cancelled") return { label: "Delivery Failed", color: "bg-red-100 text-red-800" }
 	return { label: "Processing", color: "bg-blue-100 text-blue-800" }
+}
+
+function isOrderCancelled(order: TOrder): boolean {
+	const terminal = (s?: string | null) => s === "Failed" || s === "Cancelled"
+	return terminal(order.confirm_session?.status) ||
+		terminal(order.transport?.status) ||
+		terminal(order.payout_session?.status)
 }
 
 export default function OrderDetailPage({
@@ -64,7 +70,7 @@ export default function OrderDetailPage({
 	}
 
 	const displayStatus = getOrderDisplayStatus(order)
-	const isCancelled = isCancelledOrder(order)
+	const isCancelled = isOrderCancelled(order)
 
 	return (
 		<div className="space-y-6">
