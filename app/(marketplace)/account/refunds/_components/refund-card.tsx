@@ -2,19 +2,18 @@
 
 import { memo, useState } from "react"
 import Link from "next/link"
-import { useCancelRefund, TRefund } from "@/core/order/refund.buyer"
-import { Status } from "@/core/common/status.type"
+import { TRefund, RefundStatus } from "@/core/order/refund.buyer"
 import { CreateDisputeDialog } from "@/components/order/create-dispute-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { XCircle, Loader2, Scale, ExternalLink } from "lucide-react"
+import { Scale, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const statusConfig: Record<
   RefundStatus,
-  { label: string; className: string; walletCredited?: boolean }
+  { label: string; className: string }
 > = {
   Pending: {
     label: "Awaiting seller review",
@@ -27,7 +26,6 @@ const statusConfig: Record<
   Success: {
     label: "Refunded",
     className: "bg-green-100 text-green-800",
-    walletCredited: true,
   },
   Failed: {
     label: "Rejected",
@@ -57,47 +55,46 @@ function StageIndicator({ refund }: { refund: TRefund }) {
 }
 
 export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund }) {
-  const cancelRefund = useCancelRefund()
-  const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [showDisputeDialog, setShowDisputeDialog] = useState(false)
 
-  const handleCancel = () => {
-    if (!confirmingCancel) {
-      setConfirmingCancel(true)
-      return
-    }
-    cancelRefund.mutate(
-      { id: refund.id },
-      { onSettled: () => setConfirmingCancel(false) }
-    )
-  }
+  const config = statusConfig[refund.status] ?? statusConfig.Pending
 
   return (
     <>
       <Card>
         <CardContent className="p-4">
-          {/* Header: ID, Order ref, Date, Status */}
+          {/* Header: ID, Status */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex flex-col gap-0.5">
               <span className="font-medium text-sm">
                 Refund request
               </span>
               <span className="text-xs text-muted-foreground">
-                #{refund.id.slice(0, 8)} &middot; Order #{refund.order_id.slice(0, 8)}
+                #{refund.id.slice(0, 8)} &middot; Item #{refund.order_item_id}
               </span>
             </div>
             <Badge
               variant="secondary"
-              className={cn("font-normal", statusColors[refund.status])}
+              className={cn("font-normal", config.className)}
             >
-              {statusLabels[refund.status]}
+              {config.label}
             </Badge>
           </div>
 
+          {/* Stage indicator */}
+          <StageIndicator refund={refund} />
+
           {/* Reason */}
-          <p className="text-sm text-muted-foreground line-clamp-2">
+          <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
             {refund.reason}
           </p>
+
+          {/* Rejection note */}
+          {refund.status === "Failed" && refund.rejection_note && (
+            <p className="text-sm text-destructive mt-1">
+              Rejected — {refund.rejection_note}
+            </p>
+          )}
 
           <Separator className="my-4" />
 
@@ -108,23 +105,7 @@ export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund
             </span>
 
             <div className="flex gap-2">
-              {refund.status === Status.Pending && (
-                <Button
-                  variant={confirmingCancel ? "destructive" : "outline"}
-                  size="sm"
-                  onClick={handleCancel}
-                  disabled={cancelRefund.isPending}
-                >
-                  {cancelRefund.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <XCircle className="h-4 w-4 mr-1" />
-                  )}
-                  {confirmingCancel ? "Confirm Cancel" : "Cancel Refund"}
-                </Button>
-              )}
-
-              {refund.status === Status.Failed && (
+              {refund.status === "Failed" && (
                 <Button
                   variant="outline"
                   size="sm"
