@@ -14,6 +14,7 @@ import {
 	User,
 	Package,
 	RotateCcw,
+	Scale,
 	Heart,
 	MapPin,
 	CreditCard,
@@ -33,6 +34,7 @@ const personalLinks = [
 const buyerLinks = [
 	{ href: "/account/orders", label: "Orders", icon: Package },
 	{ href: "/account/refunds", label: "Refunds", icon: RotateCcw },
+	{ href: "/account/disputes", label: "Disputes", icon: Scale },
 	{ href: "/account/wishlist", label: "Wishlist", icon: Heart },
 	{ href: "/account/addresses", label: "Addresses", icon: MapPin },
 	{ href: "/account/payment", label: "Payment Methods", icon: CreditCard },

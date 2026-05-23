@@ -15,6 +15,7 @@ import {
   Package,
   ShoppingCart,
   RotateCcw,
+  Scale,
   Tag,
   BarChart3,
   MessageCircle,
@@ -34,6 +35,7 @@ const sellerLinks = [
   { href: "/seller/products", label: "Products", icon: Package },
   { href: "/seller/orders", label: "Orders", icon: ShoppingCart },
   { href: "/seller/refunds", label: "Refunds", icon: RotateCcw },
+  { href: "/seller/disputes", label: "Disputes", icon: Scale },
   { href: "/seller/promotions", label: "Promotions", icon: Tag },
 ]
 

@@ -37,6 +37,7 @@ import {
   Loader2,
   Clock,
   AlertCircle,
+  Scale,
 } from "lucide-react"
 
 type RefundStatus = "Pending" | "Approved" | "Rejected" | "Completed"
@@ -243,6 +244,12 @@ export default function SellerRefundsPage() {
                             <Link href={`/seller/orders/${refund.order_id}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Order
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/seller/disputes`}>
+                              <Scale className="h-4 w-4 mr-2" />
+                              View Disputes
                             </Link>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
