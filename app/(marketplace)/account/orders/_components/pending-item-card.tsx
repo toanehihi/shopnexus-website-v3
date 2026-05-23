@@ -1,9 +1,11 @@
 "use client"
 
+import Image from "next/image"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Package, Clock } from "lucide-react"
+import { Clock, ImageOff, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useExchangeRates, useCurrency } from "@/core/common/currency"
 import { formatPriceInline } from "@/lib/money"
@@ -27,16 +29,18 @@ export function PendingItemCard({ item, onCancel, readOnly = false }: Props) {
   let badgeColor: string
   if (txStatus === "Pending") {
     badgeLabel = "Awaiting Payment"
-    badgeColor = "bg-yellow-100 text-yellow-800"
+    badgeColor =
+      "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"
   } else if (txStatus === "Failed") {
     badgeLabel = "Payment Failed"
-    badgeColor = "bg-red-100 text-red-800"
+    badgeColor = "bg-destructive/10 text-destructive"
   } else if (txStatus === "Cancelled") {
     badgeLabel = "Cancelled"
-    badgeColor = "bg-gray-100 text-gray-800"
+    badgeColor = "bg-muted text-muted-foreground"
   } else {
     badgeLabel = "Awaiting Seller"
-    badgeColor = "bg-yellow-100 text-yellow-800"
+    badgeColor =
+      "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-200"
   }
 
   const ensurePaymentURL = useEnsureBuyerPaymentURL()
@@ -47,7 +51,9 @@ export function PendingItemCard({ item, onCancel, readOnly = false }: Props) {
       return
     }
     try {
-      const { payment_url } = await ensurePaymentURL.mutateAsync(String(sessionID))
+      const { payment_url } = await ensurePaymentURL.mutateAsync(
+        String(sessionID),
+      )
       if (payment_url) {
         window.location.href = payment_url
         return
@@ -60,45 +66,97 @@ export function PendingItemCard({ item, onCancel, readOnly = false }: Props) {
   }
 
   const isTerminal = txStatus === "Failed" || txStatus === "Cancelled"
-  const showCancel = !readOnly && !item.order_id && !item.date_cancelled && !isTerminal && onCancel
+  const showCancel =
+    !readOnly && !item.order_id && !item.date_cancelled && !isTerminal && onCancel
+
+  const linkTarget = item.slug ? `/product/${item.slug}` : null
+
+  const Thumbnail = (
+    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-muted">
+      {item.image_url ? (
+        <Image
+          src={item.image_url}
+          alt={item.sku_name}
+          fill
+          className="object-cover"
+          sizes="80px"
+          unoptimized
+        />
+      ) : (
+        <div className="absolute inset-0 grid place-items-center text-muted-foreground">
+          <ImageOff className="h-6 w-6" />
+        </div>
+      )}
+    </div>
+  )
 
   return (
-    <Card>
+    <Card className="overflow-hidden transition-shadow hover:shadow-sm">
       <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="relative h-16 w-16 rounded bg-muted flex items-center justify-center flex-shrink-0">
-            <Package className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium truncate">{item.sku_name}</p>
-            <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
-              Qty: {item.quantity} &middot; {fmt(item.subtotal_amount)} total
-            </p>
-            {item.note && (
-              <p className="text-sm text-muted-foreground truncate">{item.note}</p>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <Badge variant="secondary" className={cn("font-normal gap-1", badgeColor)}>
-              <Clock className="h-3 w-3" />
-              {badgeLabel}
-            </Badge>
-            <span className="text-sm font-medium">{fmt(item.total_amount)}</span>
-            {!readOnly && txStatus === "Pending" && (
-              <Button variant="default" size="sm" onClick={handleContinuePayment}>
-                Continue Payment
-              </Button>
-            )}
-            {showCancel && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive h-7 px-2"
-                onClick={() => onCancel(item.id)}
+        <div className="flex gap-4">
+          {linkTarget ? (
+            <Link href={linkTarget} className="shrink-0">
+              {Thumbnail}
+            </Link>
+          ) : (
+            Thumbnail
+          )}
+
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {linkTarget ? (
+                  <Link
+                    href={linkTarget}
+                    className="font-medium hover:underline line-clamp-2"
+                  >
+                    {item.sku_name}
+                  </Link>
+                ) : (
+                  <p className="font-medium line-clamp-2">{item.sku_name}</p>
+                )}
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Qty {item.quantity} · {fmt(Math.round(item.subtotal_amount / Math.max(item.quantity, 1)))} each
+                </p>
+              </div>
+              <Badge
+                variant="secondary"
+                className={cn("font-normal gap-1 shrink-0", badgeColor)}
               >
-                Cancel
-              </Button>
+                <Clock className="h-3 w-3" />
+                {badgeLabel}
+              </Badge>
+            </div>
+
+            {item.note && (
+              <p className="text-xs text-muted-foreground italic truncate">
+                Note: {item.note}
+              </p>
             )}
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-base font-semibold tabular-nums">
+                {fmt(item.total_amount)}
+              </span>
+              <div className="flex items-center gap-2">
+                {!readOnly && txStatus === "Pending" && (
+                  <Button size="sm" onClick={handleContinuePayment}>
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    Continue Payment
+                  </Button>
+                )}
+                {showCancel && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive h-8"
+                    onClick={() => onCancel(item.id)}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>

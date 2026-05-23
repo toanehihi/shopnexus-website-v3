@@ -63,12 +63,12 @@ function RefundRow({
   acceptPending: boolean
   approvePending: boolean
 }) {
-  const badge = statusBadge[refund.Status] ?? statusBadge.Pending
-  const isStage1Actionable = refund.Status === "Pending" && refund.AcceptedByID === null
+  const badge = statusBadge[refund.status] ?? statusBadge.Pending
+  const isStage1Actionable = refund.status === "Pending" && refund.accepted_by_id === null
   const isStage2Actionable =
-    refund.Status === "Processing" &&
-    refund.AcceptedByID !== null &&
-    refund.ApprovedByID === null
+    refund.status === "Processing" &&
+    refund.accepted_by_id !== null &&
+    refund.approved_by_id === null
 
   return (
     <Card>
@@ -76,7 +76,7 @@ function RefundRow({
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="space-y-2 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-medium text-sm">#{refund.ID.slice(0, 8)}</h3>
+              <h3 className="font-medium text-sm">#{refund.id.slice(0, 8)}</h3>
               <Badge
                 variant="secondary"
                 className={cn("font-normal", badge.className)}
@@ -84,7 +84,7 @@ function RefundRow({
                 {badge.label}
               </Badge>
               <Badge variant="outline" className="gap-1">
-                {refund.Method === RefundMethod.PickUp ? (
+                {refund.method === RefundMethod.PickUp ? (
                   <>
                     <Truck className="h-3 w-3" />
                     Pick Up
@@ -99,8 +99,8 @@ function RefundRow({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Item #{refund.OrderItemID} &middot;{" "}
-              {new Date(refund.DateCreated).toLocaleDateString("en-US", {
+              Item #{refund.order_item_id} &middot;{" "}
+              {new Date(refund.date_created).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
                 year: "numeric",
@@ -109,19 +109,19 @@ function RefundRow({
 
             <div className="flex items-start gap-2 text-sm">
               <AlertCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <p className="text-muted-foreground">{refund.Reason}</p>
+              <p className="text-muted-foreground">{refund.reason}</p>
             </div>
 
-            {refund.Address && (
+            {refund.address && (
               <div className="flex items-start gap-2 text-sm">
                 <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <p className="text-muted-foreground">{refund.Address}</p>
+                <p className="text-muted-foreground">{refund.address}</p>
               </div>
             )}
 
-            {refund.Status === "Failed" && (
+            {refund.status === "Failed" && (
               <p className="text-sm text-muted-foreground">
-                Rejected — {refund.RejectionNote}
+                Rejected — {refund.rejection_note}
               </p>
             )}
           </div>
@@ -132,7 +132,7 @@ function RefundRow({
               <>
                 <Button
                   size="sm"
-                  onClick={() => onAccept(refund.ID)}
+                  onClick={() => onAccept(refund.id)}
                   disabled={acceptPending}
                 >
                   {acceptPending ? (
@@ -147,7 +147,7 @@ function RefundRow({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onRejectOpen({ refundId: refund.ID, stage: 1 })}
+                  onClick={() => onRejectOpen({ refundId: refund.id, stage: 1 })}
                 >
                   <XCircle className="h-4 w-4 mr-1" />
                   Reject
@@ -159,7 +159,7 @@ function RefundRow({
               <>
                 <Button
                   size="sm"
-                  onClick={() => onApprove(refund.ID)}
+                  onClick={() => onApprove(refund.id)}
                   disabled={approvePending}
                 >
                   {approvePending ? (
@@ -174,7 +174,7 @@ function RefundRow({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onRejectOpen({ refundId: refund.ID, stage: 2 })}
+                  onClick={() => onRejectOpen({ refundId: refund.id, stage: 2 })}
                 >
                   <XCircle className="h-4 w-4 mr-1" />
                   Reject
@@ -182,7 +182,7 @@ function RefundRow({
               </>
             )}
 
-            {refund.Status === "Success" && (
+            {refund.status === "Success" && (
               <Badge
                 variant="secondary"
                 className="bg-green-100 text-green-800 font-normal"
@@ -308,13 +308,13 @@ export default function SellerRefundsPage() {
         <div className="space-y-4">
           {refunds.map((refund) => (
             <RefundRow
-              key={refund.ID}
+              key={refund.id}
               refund={refund}
               onAccept={handleAccept}
               onApprove={handleApprove}
               onRejectOpen={setRejectDialog}
-              acceptPending={pendingAcceptId === refund.ID}
-              approvePending={pendingApproveId === refund.ID}
+              acceptPending={pendingAcceptId === refund.id}
+              approvePending={pendingApproveId === refund.id}
             />
           ))}
 

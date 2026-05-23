@@ -58,3 +58,34 @@ export function walletCurrencyForCountry(
   if (!country) return null
   return COUNTRY_TO_CURRENCY[country.toUpperCase()] ?? null
 }
+
+// Unique ISO-4217 currency codes derived from the country→currency map above.
+// Keep this in lockstep with the backend's accepted iso4217 set; the BE
+// validator rejects anything else, so a wider list here only adds dead options.
+export const SUPPORTED_CURRENCIES = Array.from(
+  new Set(Object.values(COUNTRY_TO_CURRENCY)),
+).sort() as readonly string[]
+
+export type CurrencyOption = {
+  code: string
+  label: string
+}
+
+/** Returns a localized display label like "VND — Vietnamese Dong". */
+export function currencyLabel(code: string): string {
+  try {
+    const display = new Intl.DisplayNames(["en"], { type: "currency" })
+    const name = display.of(code)
+    return name ? `${code} — ${name}` : code
+  } catch {
+    return code
+  }
+}
+
+/** Memoised select-friendly options for the supported currency set. */
+export function useCurrencyOptions(): CurrencyOption[] {
+  return useMemo(
+    () => SUPPORTED_CURRENCIES.map((code) => ({ code, label: currencyLabel(code) })),
+    [],
+  )
+}

@@ -36,7 +36,7 @@ interface CreateRefundDialogProps {
 
 export function CreateRefundDialog({ order, open, onOpenChange }: CreateRefundDialogProps) {
   const createRefund = useCreateRefund()
-  const { data: transportOptions } = useListServiceOption({ category: "transport" })
+  const { data: transportOptions } = useListServiceOption({ type: "transport" })
 
   const items: TOrderItem[] = order.items ?? []
 

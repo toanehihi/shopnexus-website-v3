@@ -15,8 +15,6 @@ import { useListContacts } from "@/core/account/contact"
 import { useUpdateCart } from "@/core/order/cart"
 import { useBuyerCheckout } from "@/core/order/order.buyer"
 import { useListServiceOption } from "@/core/common/option"
-import { useListPaymentMethods } from "@/core/account/payment-method"
-import { useGetWalletBalance } from "@/core/account/wallet"
 import { formatSoldCount } from "@/lib/utils"
 import { formatMoney, formatPriceInline, convertMoney } from "@/lib/money"
 import { Price } from "@/components/ui/price"
@@ -45,7 +43,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -103,11 +100,11 @@ export default function ProductDetailPage({
 	const { data: contacts } = useListContacts()
 	const { data: me } = useGetMe()
 	const { data: transportOptions } = useListServiceOption({
-		category: "transport",
+		type: "transport",
 	})
-	const { data: paymentOptions } = useListServiceOption({ category: "payment" })
-	const { data: paymentMethods } = useListPaymentMethods()
-	const { data: walletData } = useGetWalletBalance()
+	const { data: paymentOptions } = useListServiceOption({ type: "payment" })
+	const ownedPayments = (paymentOptions ?? []).filter((o) => o.owned)
+	const otherPayments = (paymentOptions ?? []).filter((o) => !o.owned)
 	const preferred = useCurrency()
 	const { data: rateData } = useExchangeRates()
 
@@ -124,7 +121,6 @@ export default function ProductDetailPage({
 	const [buyNowContactId, setBuyNowContactId] = useState<string>("")
 	const [buyNowTransportOption, setBuyNowTransportOption] = useState<string>("")
 	const [buyNowPaymentOption, setBuyNowPaymentOption] = useState<string>("")
-	const [buyNowUseWallet, setBuyNowUseWallet] = useState(false)
 	const [buyNowAddressMismatch, setBuyNowAddressMismatch] = useState<{
 		resolvedCountry: string | null
 		profileCountry: string | null
@@ -319,7 +315,6 @@ export default function ProductDetailPage({
 		() => contacts?.find((c) => c.id === buyNowContactId) ?? null,
 		[contacts, buyNowContactId],
 	)
-	const walletBalance = walletData?.balance ?? 0
 
 	// Clear the mismatch banner whenever the user swaps to a different
 	// shipping contact in the dialog — they may well have picked one in a
@@ -350,16 +345,13 @@ export default function ProductDetailPage({
 
 	useEffect(() => {
 		if (buyNowPaymentOption) return
-		const defaultMethod =
-			paymentMethods?.find((pm) => pm.is_default) ?? paymentMethods?.[0]
-		if (defaultMethod) {
-			setBuyNowPaymentOption(`pm:${defaultMethod.id}`)
-			return
-		}
-		if (paymentOptions && paymentOptions.length > 0) {
-			setBuyNowPaymentOption(paymentOptions[0].id)
-		}
-	}, [paymentMethods, paymentOptions, buyNowPaymentOption])
+		const defaultOwned = ownedPayments.find(
+			(o) => (o.data as { is_default?: boolean }).is_default,
+		)
+		const fallback = ownedPayments[0] ?? otherPayments[0]
+		const pick = defaultOwned ?? fallback
+		if (pick) setBuyNowPaymentOption(pick.id)
+	}, [ownedPayments, otherPayments, buyNowPaymentOption])
 
 	const handleBuyNow = () => {
 		if (!selectedSku) return
@@ -389,7 +381,7 @@ export default function ProductDetailPage({
 				buy_now: true,
 				address: selectedBuyNowContact.address,
 				payment_option: buyNowPaymentOption,
-				use_wallet: buyNowUseWallet,
+				use_wallet: false,
 				items: [
 					{
 						sku_id: selectedSku.id,
@@ -399,13 +391,9 @@ export default function ProductDetailPage({
 				],
 			})
 			setIsBuyNowOpen(false)
-			if (result.requires_gateway_payment) {
-				if (result.gateway_url) {
-					toast.info("Redirecting to payment...")
-					window.location.href = result.gateway_url
-					return
-				}
-				toast.error("Payment URL missing — please contact support")
+			if (result.payment_url) {
+				toast.info("Redirecting to payment...")
+				window.location.href = result.payment_url
 				return
 			}
 			toast.success("Order placed successfully!", {
@@ -1277,9 +1265,9 @@ export default function ProductDetailPage({
 												</SelectItem>
 											))
 										) : (
-											<SelectItem value="" disabled>
+											<div className="px-2 py-1.5 text-sm text-muted-foreground">
 												No shipping options available
-											</SelectItem>
+											</div>
 										)}
 									</SelectContent>
 								</Select>
@@ -1296,12 +1284,15 @@ export default function ProductDetailPage({
 										<SelectValue placeholder="Select payment method" />
 									</SelectTrigger>
 									<SelectContent>
-										{paymentMethods?.map((pm) => (
-											<SelectItem key={pm.id} value={`pm:${pm.id}`}>
-												{pm.data.brand ?? pm.provider} **** {pm.data.last4}
-											</SelectItem>
-										))}
-										{paymentOptions?.map((opt) => (
+										{ownedPayments.map((opt) => {
+											const d = opt.data as { brand?: string; last4?: string }
+											return (
+												<SelectItem key={opt.id} value={opt.id}>
+													{d.brand ?? opt.provider} **** {d.last4}
+												</SelectItem>
+											)
+										})}
+										{otherPayments.map((opt) => (
 											<SelectItem key={opt.id} value={opt.id}>
 												{opt.name}
 											</SelectItem>
@@ -1309,28 +1300,6 @@ export default function ProductDetailPage({
 									</SelectContent>
 								</Select>
 							</div>
-
-							{/* Wallet */}
-							{walletBalance > 0 && (
-								<div className="flex items-center justify-between rounded-lg border p-2.5">
-									<div className="flex items-center gap-2">
-										<Label
-											htmlFor="buy-now-use-wallet"
-											className="text-sm font-normal cursor-pointer"
-										>
-											Use wallet
-										</Label>
-										<span className="text-xs text-muted-foreground">
-											({formatMoney(walletBalance, preferred)} available)
-										</span>
-									</div>
-									<Switch
-										id="buy-now-use-wallet"
-										checked={buyNowUseWallet}
-										onCheckedChange={setBuyNowUseWallet}
-									/>
-								</div>
-							)}
 
 							<Separator />
 

@@ -7,16 +7,14 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useRequireAuth } from "@/core/account/auth"
 import { useGetCart } from "@/core/order/cart"
-import { useBuyerCheckout } from "@/core/order/order.buyer"
+import { useBuyerCheckout, useQuoteBuyerTransport } from "@/core/order/order.buyer"
 import {
 	useListContacts,
 	AddressType,
 	type Contact,
 } from "@/core/account/contact"
 import { useGetMe } from "@/core/account/account"
-import { useListServiceOption } from "@/core/common/option"
-import { useListPaymentMethods } from "@/core/account/payment-method"
-import { useGetWalletBalance } from "@/core/account/wallet"
+import { useListServiceOption, useListOption } from "@/core/common/option"
 import { formatPriceInline, formatMoney, convertMoney } from "@/lib/money"
 import { useExchangeRates, useCurrency } from "@/core/common/currency"
 import { walletCurrencyForCountry, countryLabel } from "@/lib/countries"
@@ -32,7 +30,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
 	Select,
 	SelectContent,
@@ -48,7 +45,6 @@ import {
 	ExternalLink,
 	Truck,
 	CreditCard,
-	Wallet,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -63,11 +59,11 @@ export default function CheckoutPage() {
 	const { data: contacts, isLoading: contactsLoading } = useListContacts()
 	const { data: user } = useGetMe()
 	const { data: transportOptions } = useListServiceOption({
-		category: "transport",
+		type: "transport",
 	})
-	const { data: paymentOptions } = useListServiceOption({ category: "payment" })
-	const { data: paymentMethods } = useListPaymentMethods()
-	const { data: walletData } = useGetWalletBalance()
+	const { data: paymentOptions } = useListOption({ type: "payment" })
+	const ownedPayments = (paymentOptions ?? []).filter((o) => o.owned)
+	const otherPayments = (paymentOptions ?? []).filter((o) => !o.owned)
 	const preferred = useCurrency()
 	const { data: rateData } = useExchangeRates()
 
@@ -75,7 +71,6 @@ export default function CheckoutPage() {
 
 	const [selectedContactId, setSelectedContactId] = useState<string>("")
 	const [selectedPaymentOption, setSelectedPaymentOption] = useState<string>("")
-	const [useWallet, setUseWallet] = useState(false)
 	const [transportSelections, setTransportSelections] = useState<
 		Record<string, string>
 	>({})
@@ -109,28 +104,43 @@ export default function CheckoutPage() {
 		}
 	}, [cart, transportOptions])
 
-	// Set default payment option
+	// Set default payment option: prefer the user's flagged-default owned card,
+	// fall back to the first available option in either bucket.
 	useEffect(() => {
-		if (!selectedPaymentOption) {
-			if (paymentMethods && paymentMethods.length > 0) {
-				const defaultMethod = paymentMethods.find((pm) => pm.is_default)
-				if (defaultMethod) {
-					setSelectedPaymentOption(`pm:${defaultMethod.id}`)
-					return
-				}
-			}
-			if (paymentOptions && paymentOptions.length > 0) {
-				setSelectedPaymentOption(paymentOptions[0].id)
-			}
-		}
-	}, [paymentMethods, paymentOptions, selectedPaymentOption])
+		if (selectedPaymentOption) return
+		const defaultOwned = ownedPayments.find(
+			(o) => (o.data as { is_default?: boolean }).is_default,
+		)
+		const fallback = ownedPayments[0] ?? otherPayments[0]
+		const pick = defaultOwned ?? fallback
+		if (pick) setSelectedPaymentOption(pick.id)
+	}, [ownedPayments, otherPayments, selectedPaymentOption])
 
 	const selectedContact = useMemo(
 		() => contacts?.find((c) => c.id === selectedContactId) ?? null,
 		[contacts, selectedContactId],
 	)
 
-	const walletBalance = walletData?.balance ?? 0
+	// Build the quote payload only when every cart item has a transport option
+	// AND we have a shipping address — otherwise the BE would 400 on validation.
+	// Memoised so React-Query doesn't see a fresh object every render.
+	const quotePayload = useMemo(() => {
+		if (!cart || cart.length === 0) return null
+		if (!selectedContact) return null
+		const allHaveOption = cart.every((i) => !!transportSelections[i.sku.id])
+		if (!allHaveOption) return null
+		return {
+			address: selectedContact.address,
+			items: cart.map((item) => ({
+				sku_id: item.sku.id,
+				quantity: item.quantity,
+				transport_option: transportSelections[item.sku.id],
+			})),
+		}
+	}, [cart, selectedContact, transportSelections])
+
+	const { data: quoteData, isFetching: quoteLoading } =
+		useQuoteBuyerTransport(quotePayload)
 
 	const handleCheckout = async () => {
 		if (!selectedContact || !cart) return
@@ -141,7 +151,7 @@ export default function CheckoutPage() {
 				buy_now: false,
 				address: selectedContact.address,
 				payment_option: selectedPaymentOption,
-				use_wallet: useWallet,
+				use_wallet: false,
 				items: cart.map((item) => ({
 					sku_id: item.sku.id,
 					quantity: item.quantity,
@@ -150,13 +160,9 @@ export default function CheckoutPage() {
 				})),
 			})
 
-			if (result.requires_gateway_payment) {
-				if (result.gateway_url) {
-					toast.info("Redirecting to payment...")
-					window.location.href = result.gateway_url
-					return
-				}
-				toast.error("Payment URL missing — please contact support")
+			if (result.payment_url) {
+				toast.info("Redirecting to payment...")
+				window.location.href = result.payment_url
 				return
 			}
 			toast.success("Checkout successful! Your order has been placed.")
@@ -207,10 +213,14 @@ export default function CheckoutPage() {
 		(acc, item) => acc + item.sku.price * item.quantity,
 		0,
 	)
-	const estimatedShipping = 0
-	const walletDeduction = useWallet
-		? Math.min(walletBalance, subtotal + estimatedShipping)
-		: 0
+	// Sum per-item transport costs converted to the buyer's preferred currency.
+	// Quotes are denominated in the seller SPU's source currency (same as the
+	// workflow's runQuoteTransport step), so each leg is converted individually.
+	const estimatedShipping = (quoteData?.items ?? []).reduce(
+		(sum, q) =>
+			sum + (convertMoney(q.cost, q.currency, preferred, rateData.rates) ?? 0),
+		0,
+	)
 
 	// Summary always renders in `preferred`. Any item whose rate is missing
 	// contributes 0 — the server recalcs at confirmation anyway.
@@ -221,8 +231,7 @@ export default function CheckoutPage() {
 			sum + toPreferred(item.sku.price * item.quantity, item.currency),
 		0,
 	)
-	const walletPreferred = toPreferred(walletDeduction, "VND")
-	const totalPreferred = subtotalPreferred + estimatedShipping - walletPreferred
+	const totalPreferred = subtotalPreferred + estimatedShipping
 
 	const canCheckout =
 		!!selectedContactId && !!selectedPaymentOption && !addressMismatch
@@ -424,56 +433,63 @@ export default function CheckoutPage() {
 								onValueChange={setSelectedPaymentOption}
 								className="space-y-3"
 							>
-								{/* Saved Payment Methods */}
-								{paymentMethods && paymentMethods.length > 0 && (
+								{ownedPayments.length > 0 && (
 									<div className="space-y-2">
 										<p className="text-sm font-medium text-muted-foreground">
 											Saved Cards
 										</p>
-										{paymentMethods.map((pm) => (
-											<Label
-												key={pm.id}
-												htmlFor={`checkout-pm-${pm.id}`}
-												className={cn(
-													"flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
-													selectedPaymentOption === `pm:${pm.id}` &&
-														"border-primary bg-accent/30",
-												)}
-											>
-												<RadioGroupItem
-													value={`pm:${pm.id}`}
-													id={`checkout-pm-${pm.id}`}
-												/>
-												<CreditCard className="h-4 w-4 text-muted-foreground" />
-												<div className="flex-1">
-													<span className="font-medium">
-														{pm.data.brand ?? pm.provider} **** {pm.data.last4}
-													</span>
-													{pm.data.exp_month && pm.data.exp_year && (
-														<p className="text-xs text-muted-foreground">
-															Expires{" "}
-															{String(pm.data.exp_month).padStart(2, "0")}/
-															{pm.data.exp_year}
-														</p>
+										{ownedPayments.map((opt) => {
+											const d = opt.data as {
+												brand?: string
+												last4?: string
+												exp_month?: number
+												exp_year?: number
+												is_default?: boolean
+											}
+											return (
+												<Label
+													key={opt.id}
+													htmlFor={`checkout-pm-${opt.id}`}
+													className={cn(
+														"flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/50",
+														selectedPaymentOption === opt.id &&
+															"border-primary bg-accent/30",
 													)}
-												</div>
-												{pm.is_default && (
-													<Badge variant="secondary" className="text-xs">
-														Default
-													</Badge>
-												)}
-											</Label>
-										))}
+												>
+													<RadioGroupItem
+														value={opt.id}
+														id={`checkout-pm-${opt.id}`}
+													/>
+													<CreditCard className="h-4 w-4 text-muted-foreground" />
+													<div className="flex-1">
+														<span className="font-medium">
+															{d.brand ?? opt.provider} **** {d.last4}
+														</span>
+														{d.exp_month && d.exp_year && (
+															<p className="text-xs text-muted-foreground">
+																Expires{" "}
+																{String(d.exp_month).padStart(2, "0")}/
+																{d.exp_year}
+															</p>
+														)}
+													</div>
+													{d.is_default && (
+														<Badge variant="secondary" className="text-xs">
+															Default
+														</Badge>
+													)}
+												</Label>
+											)
+										})}
 									</div>
 								)}
 
-								{/* Service Payment Options (VNPay, SePay, COD, etc.) */}
-								{paymentOptions && paymentOptions.length > 0 && (
+								{otherPayments.length > 0 && (
 									<div className="space-y-2">
 										<p className="text-sm font-medium text-muted-foreground">
 											Other Payment Methods
 										</p>
-										{paymentOptions.map((option) => (
+										{otherPayments.map((option) => (
 											<Label
 												key={option.id}
 												htmlFor={`checkout-so-${option.id}`}
@@ -500,54 +516,6 @@ export default function CheckoutPage() {
 									</div>
 								)}
 							</RadioGroup>
-						</CardContent>
-					</Card>
-
-					{/* Wallet Toggle */}
-					<Card>
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								<Wallet className="h-5 w-5" />
-								Wallet
-							</CardTitle>
-						</CardHeader>
-						<CardContent>
-							<Label
-								htmlFor="use-wallet"
-								className={cn(
-									"flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors hover:bg-accent/50",
-									useWallet && "border-primary bg-accent/30",
-								)}
-							>
-								<Checkbox
-									id="use-wallet"
-									checked={useWallet}
-									onCheckedChange={(checked) => setUseWallet(checked === true)}
-								/>
-								<div className="flex-1">
-									<span className="font-medium">Use wallet balance</span>
-									<p className="text-sm text-muted-foreground">
-										Available balance:{" "}
-										{formatPriceInline(
-											walletBalance,
-											"VND",
-											preferred,
-											rateData.rates,
-										)}
-									</p>
-								</div>
-								{useWallet && walletDeduction > 0 && (
-									<span className="text-sm font-medium text-green-600">
-										−
-										{formatPriceInline(
-											walletDeduction,
-											"VND",
-											preferred,
-											rateData.rates,
-										)}
-									</span>
-								)}
-							</Label>
 						</CardContent>
 					</Card>
 
@@ -636,17 +604,11 @@ export default function CheckoutPage() {
 										Estimated shipping
 									</span>
 									<span>
-										{estimatedShipping > 0
-											? formatMoney(estimatedShipping, preferred)
-											: "Calculated at confirmation"}
+										{quoteLoading
+											? "Calculating..."
+											: formatMoney(estimatedShipping, preferred)}
 									</span>
 								</div>
-								{useWallet && walletDeduction > 0 && (
-									<div className="flex justify-between text-sm text-green-600">
-										<span>Wallet deduction</span>
-										<span>−{formatMoney(walletPreferred, preferred)}</span>
-									</div>
-								)}
 								<Separator />
 								<div className="flex justify-between font-semibold text-lg">
 									<span>Estimated Total</span>

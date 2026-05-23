@@ -5,12 +5,26 @@ import qs from "qs"
 
 // ===== Types =====
 
-// Mirrors backend sharedmodel.Option. uuid.NullUUID JSON-serializes as either
-// the UUID string (when Valid) or null, so owner_id / logo_rs_id are
-// `string | null` on the wire — not the {UUID, Valid} envelope.
+// Mirrors backend commonbiz.OptionListItem. The list endpoint hides owner_id
+// and exposes ownership via `owned` (true when the row's OwnerID matches the
+// authenticated caller). Anonymous callers always get owned=false.
 export type Option = {
   id: string
-  owner_id: string | null
+  type: OptionType
+  provider: string
+  is_enabled: boolean
+  name: string
+  description: string
+  priority: number
+  logo_rs_id: string | null
+  data: Record<string, unknown>
+  owned: boolean
+}
+
+// Wire shape accepted by UpsertOptions. Mirrors sharedmodel.Option — owner_id
+// is set server-side from auth claims, so callers never populate it directly.
+export type OptionInput = {
+  id: string
   type: OptionType
   provider: string
   is_enabled: boolean
@@ -25,7 +39,7 @@ export type OptionType = "payment" | "transport" | "object_store"
 
 // ===== Hooks =====
 
-export const useListOption = (params: { category: string }) =>
+export const useListOption = (params: { type: string }) =>
   useQuery({
     queryKey: ["common", "option", "list", params],
     queryFn: () =>
@@ -34,7 +48,7 @@ export const useListOption = (params: { category: string }) =>
 
 export const useUpsertOptions = () =>
   useMutation({
-    mutationFn: async (params: { category: string; configs: Option[] }) =>
+    mutationFn: async (params: { type: string; configs: OptionInput[] }) =>
       customFetchStandard<{ message: string }>("common/option", {
         method: "POST",
         body: JSON.stringify(params),

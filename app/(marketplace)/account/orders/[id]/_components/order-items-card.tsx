@@ -1,18 +1,23 @@
 "use client"
 
+import Image from "next/image"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useExchangeRates, useCurrency } from "@/core/common/currency"
 import { formatPriceInline } from "@/lib/money"
-import { Package } from "lucide-react"
+import { ImageOff } from "lucide-react"
 
 interface OrderItemsCardProps {
 	items: {
-		ID: number
-		SkuName: string
-		SkuID: string
-		Quantity: number
-		SubtotalAmount: number
-		Note?: string | null
+		id: number
+		sku_name: string
+		sku_id: string
+		spu_id: string
+		slug?: string
+		image_url?: string
+		quantity: number
+		subtotal_amount: number
+		note?: string | null
 	}[]
 	currency: string
 }
@@ -25,37 +30,70 @@ export function OrderItemsCard({ items, currency }: OrderItemsCardProps) {
 			<CardHeader>
 				<CardTitle>Order Items ({items.length})</CardTitle>
 			</CardHeader>
-			<CardContent className="space-y-4">
-				{items.map((item) => (
-					<div key={item.ID} className="flex gap-4">
-						<div className="relative h-20 w-20 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-							<Package className="h-8 w-8 text-muted-foreground" />
-						</div>
-						<div className="flex-1 min-w-0">
-							<p className="font-medium truncate">{item.SkuName}</p>
-							{item.Note && (
-								<p className="text-sm text-muted-foreground truncate">
-									{item.Note}
-								</p>
+			<CardContent className="divide-y -mx-6 px-0">
+				{items.map((item) => {
+					const linkTarget = item.slug ? `/product/${item.slug}` : null
+					const Thumb = (
+						<div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-muted">
+							{item.image_url ? (
+								<Image
+									src={item.image_url}
+									alt={item.sku_name}
+									fill
+									className="object-cover"
+									sizes="80px"
+									unoptimized
+								/>
+							) : (
+								<div className="absolute inset-0 grid place-items-center text-muted-foreground">
+									<ImageOff className="h-6 w-6" />
+								</div>
 							)}
-
-							<div className="flex items-center justify-between mt-2">
-								<p className="text-sm text-muted-foreground">
-									Qty: {item.Quantity}
-								</p>
-								<span className="font-medium">
-									{formatPriceInline(
-										item.SubtotalAmount,
-										currency,
-										preferred,
-										rateData?.rates,
-										"native",
-									)}
-								</span>
+						</div>
+					)
+					return (
+						<div key={item.id} className="flex gap-4 px-6 py-4 first:pt-0 last:pb-0">
+							{linkTarget ? (
+								<Link href={linkTarget} className="shrink-0">
+									{Thumb}
+								</Link>
+							) : (
+								Thumb
+							)}
+							<div className="flex-1 min-w-0">
+								{linkTarget ? (
+									<Link
+										href={linkTarget}
+										className="font-medium hover:underline line-clamp-2"
+									>
+										{item.sku_name}
+									</Link>
+								) : (
+									<p className="font-medium line-clamp-2">{item.sku_name}</p>
+								)}
+								{item.note && (
+									<p className="text-sm text-muted-foreground italic mt-1 truncate">
+										Note: {item.note}
+									</p>
+								)}
+								<div className="flex items-center justify-between mt-2">
+									<p className="text-sm text-muted-foreground">
+										Qty {item.quantity}
+									</p>
+									<span className="font-semibold tabular-nums">
+										{formatPriceInline(
+											item.subtotal_amount,
+											currency,
+											preferred,
+											rateData?.rates,
+											"native",
+										)}
+									</span>
+								</div>
 							</div>
 						</div>
-					</div>
-				))}
+					)
+				})}
 			</CardContent>
 		</Card>
 	)

@@ -97,6 +97,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         name: product.name,
         description: product.description,
         category_id: product.category?.id || "",
+        currency: product.currency || "VND",
         is_enabled: product.is_enabled,
         tags: product.tags || [],
         resource_ids: product.resources?.map(r => r.id) || [],
@@ -345,9 +346,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   <div key={sku.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        {/* ProductSPU has no currency field yet; fall back to VND */}
+
                         <span className="font-medium">
-                          <Price amount={sku.price} currency="VND" emphasis="native-only" />
+                          <Price amount={sku.price} currency={product.currency} emphasis="native-only" />
                         </span>
                         <Badge variant="outline">Stock: {sku.stock}</Badge>
                         {sku.combinable && <Badge variant="secondary">Combinable</Badge>}
@@ -555,7 +556,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             <DialogDescription>
               {stockSKU?.attributes && stockSKU.attributes.length > 0
                 ? stockSKU.attributes.map(a => a.value).join(" / ")
-                : <Price amount={stockSKU?.price ?? 0} currency="VND" emphasis="native-only" />}
+                : <Price amount={stockSKU?.price ?? 0} currency={product.currency} emphasis="native-only" />}
             </DialogDescription>
           </DialogHeader>
 

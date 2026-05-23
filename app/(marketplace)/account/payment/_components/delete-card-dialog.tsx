@@ -1,6 +1,6 @@
 "use client"
 
-import { type PaymentMethod } from "@/core/account/payment-method"
+import { type Option } from "@/core/common/option"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,24 +11,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { CreditCard, Loader2 } from "lucide-react"
-
-function formatCardNumber(last4?: string) {
-  if (!last4) return null
-  return `**** **** **** ${last4}`
-}
-
-function formatExpiry(month?: number, year?: number) {
-  if (month == null || year == null) return null
-  return `${String(month).padStart(2, "0")}/${year}`
-}
-
-function capitalizeFirst(str?: string) {
-  if (!str) return null
-  return str.charAt(0).toUpperCase() + str.slice(1)
-}
+import {
+  cardDataOf,
+  capitalizeFirst,
+  formatCardNumber,
+  formatExpiry,
+} from "./card-data"
 
 interface DeleteCardDialogProps {
-  method: PaymentMethod | null
+  method: Option | null
   onOpenChange: (open: boolean) => void
   onDelete: () => void
   isDeleting: boolean
@@ -40,11 +31,9 @@ export function DeleteCardDialog({
   onDelete,
   isDeleting,
 }: DeleteCardDialogProps) {
+  const data = method ? cardDataOf(method) : null
   return (
-    <Dialog
-      open={!!method}
-      onOpenChange={() => onOpenChange(false)}
-    >
+    <Dialog open={!!method} onOpenChange={() => onOpenChange(false)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete Card</DialogTitle>
@@ -53,26 +42,21 @@ export function DeleteCardDialog({
             undone.
           </DialogDescription>
         </DialogHeader>
-        {method && (
+        {method && data && (
           <div className="rounded-lg border p-4 space-y-1">
             <div className="flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-muted-foreground" />
               <p className="font-medium">
-                {method.data?.brand
-                  ? `${capitalizeFirst(method.data.brand)} ${formatCardNumber(method.data.last4) ?? ""}`
-                  : method.label}
+                {data.brand
+                  ? `${capitalizeFirst(data.brand)} ${formatCardNumber(data.last4) ?? ""}`
+                  : method.name}
               </p>
             </div>
-            {method.data?.exp_month != null &&
-              method.data?.exp_year != null && (
-                <p className="text-sm text-muted-foreground pl-6">
-                  Expires{" "}
-                  {formatExpiry(
-                    method.data.exp_month,
-                    method.data.exp_year
-                  )}
-                </p>
-              )}
+            {data.exp_month != null && data.exp_year != null && (
+              <p className="text-sm text-muted-foreground pl-6">
+                Expires {formatExpiry(data.exp_month, data.exp_year)}
+              </p>
+            )}
           </div>
         )}
         <DialogFooter>

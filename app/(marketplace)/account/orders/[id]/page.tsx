@@ -15,18 +15,18 @@ import { OrderSummaryCard } from "./_components/order-summary-card"
 import { PaymentInfoCard } from "./_components/payment-info-card"
 import { CreateRefundDialog } from "@/components/order/create-refund-dialog"
 
-function summarizeOrder(items?: Array<{ SkuName: string }>): string {
+function summarizeOrder(items?: Array<{ sku_name: string }>): string {
 	if (!items?.length) return "Order"
-	if (items.length === 1) return items[0].SkuName
-	if (items.length === 2) return `${items[0].SkuName}, ${items[1].SkuName}`
-	return `${items[0].SkuName} and ${items.length - 1} more`
+	if (items.length === 1) return items[0].sku_name
+	if (items.length === 2) return `${items[0].sku_name}, ${items[1].sku_name}`
+	return `${items[0].sku_name} and ${items.length - 1} more`
 }
 
 import type { TOrder } from "@/core/order/order.buyer"
 
 function getOrderDisplayStatus(order: TOrder): { label: string; color: string } {
-	const cs = order.ConfirmFeeTx?.Status
-	const ts = order.Transport?.Status
+	const cs = order.confirm_session?.status
+	const ts = order.transport?.status
 	if (cs === "Failed") return { label: "Payment Failed", color: "bg-red-100 text-red-800" }
 	if (cs === "Cancelled") return { label: "Cancelled", color: "bg-red-100 text-red-800" }
 	if (ts === "Delivered") return { label: "Completed", color: "bg-green-100 text-green-800" }
@@ -82,10 +82,10 @@ export default function OrderDetailPage({
 					</Link>
 				</Button>
 				<div className="flex-1">
-					<h1 className="text-2xl font-bold">{summarizeOrder(order.Items)}</h1>
+					<h1 className="text-2xl font-bold">{summarizeOrder(order.items)}</h1>
 					<p className="text-muted-foreground">
-						#{order.ID.slice(0, 8)} &middot; Placed on{" "}
-						{new Date(order.DateCreated).toLocaleDateString()}
+						#{order.id.slice(0, 8)} &middot; Placed on{" "}
+						{new Date(order.date_created).toLocaleDateString()}
 					</p>
 				</div>
 				<Badge
@@ -97,7 +97,7 @@ export default function OrderDetailPage({
 			</div>
 
 			{/* Order Progress */}
-			{!isCancelled && <OrderProgress confirmFeeStatus={order.ConfirmFeeTx?.Status} transportStatus={order.Transport?.Status} />}
+			{!isCancelled && <OrderProgress confirmFeeStatus={order.confirm_session?.status} transportStatus={order.transport?.status} />}
 
 			{isCancelled && (
 				<Card className="border-destructive/50 bg-destructive/5">
@@ -117,8 +117,8 @@ export default function OrderDetailPage({
 				{/* Order Items */}
 				<div className="lg:col-span-2 space-y-6">
 					<OrderItemsCard
-						items={order.Items}
-						currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
+						items={order.items}
+						currency={order.confirm_session?.currency ?? "VND"}
 					/>
 
 					{/* Shipping Info */}
@@ -130,7 +130,7 @@ export default function OrderDetailPage({
 							</CardTitle>
 						</CardHeader>
 						<CardContent>
-							<p className="text-sm whitespace-pre-line">{order.Address}</p>
+							<p className="text-sm whitespace-pre-line">{order.address}</p>
 						</CardContent>
 					</Card>
 				</div>
@@ -138,15 +138,15 @@ export default function OrderDetailPage({
 				{/* Order Summary */}
 				<div className="space-y-6">
 					<OrderSummaryCard
-						totalAmount={order.TotalAmount}
-						currency={order.ConfirmFeeTx?.ToCurrency ?? "VND"}
+						totalAmount={order.total_amount}
+						currency={order.confirm_session?.currency ?? "VND"}
 					/>
 
-					<PaymentInfoCard confirmFeeTx={order.ConfirmFeeTx} />
+					<PaymentInfoCard confirmSession={order.confirm_session} />
 
 					{/* Actions */}
 					<div className="space-y-2">
-						{order.ConfirmFeeTx?.Status === "Success" && order.Transport?.Status === "Delivered" && (
+						{order.confirm_session?.status === "Success" && order.transport?.status === "Delivered" && (
 							<Button className="w-full" onClick={() => setShowRefundDialog(true)}>
 								Request Refund
 							</Button>

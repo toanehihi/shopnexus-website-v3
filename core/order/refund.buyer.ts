@@ -13,21 +13,21 @@ export enum RefundMethod {
 export type RefundStatus = "Pending" | "Processing" | "Success" | "Failed"
 
 export type TRefund = {
-  ID: string
-  AccountID: string
-  OrderItemID: number
-  TransportID: number
-  Method: RefundMethod
-  Reason: string
-  Address: string | null
-  DateCreated: string
-  Status: RefundStatus
-  AcceptedByID: string | null
-  DateAccepted: string | null
-  RejectionNote: string | null
-  ApprovedByID: string | null
-  DateApproved: string | null
-  RefundTxID: number | null
+  id: string
+  account_id: string
+  order_item_id: number
+  transport_id: number
+  method: RefundMethod
+  reason: string
+  address: string | null
+  date_created: string
+  status: RefundStatus
+  accepted_by_id: string | null
+  date_accepted: string | null
+  rejection_note: string | null
+  approved_by_id: string | null
+  date_approved: string | null
+  refund_tx_id: number | null
 }
 
 // ===== Hooks =====

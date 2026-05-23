@@ -35,8 +35,8 @@ const statusConfig: Record<
 function StageIndicator({ refund }: { refund: TRefund }) {
   const stages = [
     { label: "Requested", done: true },
-    { label: "Seller accepted", done: refund.AcceptedByID !== null },
-    { label: "Refund approved", done: refund.ApprovedByID !== null },
+    { label: "Seller accepted", done: refund.accepted_by_id !== null },
+    { label: "Refund approved", done: refund.approved_by_id !== null },
   ]
 
   return (
@@ -55,8 +55,8 @@ function StageIndicator({ refund }: { refund: TRefund }) {
 
 export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund }) {
   const router = useRouter()
-  const config = statusConfig[refund.Status] ?? {
-    label: refund.Status as string,
+  const config = statusConfig[refund.status] ?? {
+    label: refund.status as string,
     className: "",
   }
 
@@ -68,7 +68,7 @@ export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-sm">Refund request</span>
             <span className="text-xs text-muted-foreground">
-              #{refund.ID.slice(0, 8)} &middot; Item #{refund.OrderItemID}
+              #{refund.id.slice(0, 8)} &middot; Item #{refund.order_item_id}
             </span>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -89,14 +89,14 @@ export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund
 
         {/* Reason */}
         <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
-          {refund.Reason}
+          {refund.reason}
         </p>
 
         {/* Rejection note */}
-        {refund.Status === "Failed" && refund.RejectionNote && (
+        {refund.status === "Failed" && refund.rejection_note && (
           <p className="text-sm text-red-600 mt-1">
             <span className="font-medium">Rejection reason: </span>
-            {refund.RejectionNote}
+            {refund.rejection_note}
           </p>
         )}
 
@@ -105,17 +105,17 @@ export const RefundCard = memo(function RefundCard({ refund }: { refund: TRefund
         {/* Footer */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            {new Date(refund.DateCreated).toLocaleDateString()}
+            {new Date(refund.date_created).toLocaleDateString()}
           </span>
 
           <div className="flex gap-2">
-            {refund.Status === "Failed" && (
+            {refund.status === "Failed" && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() =>
                   // TODO: dispute creation
-                  router.push(`/account/disputes/new?refund_id=${refund.ID}`)
+                  router.push(`/account/disputes/new?refund_id=${refund.id}`)
                 }
               >
                 Raise dispute

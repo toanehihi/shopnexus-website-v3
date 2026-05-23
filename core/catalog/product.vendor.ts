@@ -46,6 +46,7 @@ export type ProductSPU = {
   featured_sku_id: string | null
   name: string
   description: string
+  currency: string
   is_enabled: boolean
   date_created: string
   date_updated: string
@@ -82,6 +83,7 @@ export const useCreateProductSPU = () => {
       category_id: string
       name: string
       description: string
+      currency: string
       is_enabled: boolean
       tags: string[]
       resource_ids?: string[]
@@ -107,6 +109,7 @@ export const useUpdateProductSPU = () => {
       featured_sku_id?: string
       name?: string
       description?: string
+      currency?: string
       is_enabled?: boolean
       regenerate_slug?: boolean
       tags?: string[]

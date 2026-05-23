@@ -29,6 +29,7 @@ export default function NewProductPage() {
         name: formData.name,
         description: formData.description,
         category_id: formData.category_id,
+        currency: formData.currency,
         is_enabled: formData.is_enabled,
         tags: formData.tags,
         resource_ids: formData.resource_ids,
@@ -69,7 +70,7 @@ export default function NewProductPage() {
           </Button>
           <Button
             type="submit"
-            disabled={createProduct.isPending || !formData.name || !formData.category_id}
+            disabled={createProduct.isPending || !formData.name || !formData.category_id || !formData.currency}
           >
             {createProduct.isPending ? (
               <>

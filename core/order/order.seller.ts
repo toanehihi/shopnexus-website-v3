@@ -4,14 +4,12 @@ import { useInfiniteQueryPagination } from "@/lib/queryclient/use-infinite-query
 import { PaginationParams } from "@/lib/queryclient/response.type"
 import { TOrder, TOrderItem } from "./order.buyer"
 
-// ConfirmSellerPendingResult — field names from interface.go json tags (snake_case)
+// ConfirmSellerPendingResult — sync envelope from POST /order/seller/pending/confirm.
+// The workflow runs async; this response carries the workflow ID + the gateway
+// redirect URL (empty for wallet-only confirms).
 export type TConfirmSellerPendingResult = {
-  order: TOrder
-  confirm_fee_tx_ids: number[]
-  payout_tx_id: number
-  blocker_tx_id: number
-  requires_gateway_payment: boolean
-  gateway_url: string | null
+  confirm_session_id: string
+  payment_url: string
 }
 
 // ===== Hooks =====
